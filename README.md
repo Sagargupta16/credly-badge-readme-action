@@ -171,6 +171,10 @@ Override how badges are categorized using keywords matched against the badge nam
     echo "  Knowledge:      ${{ steps.credly.outputs.knowledge-count }}"
 ```
 
+## Live Example
+
+See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#certifications--badges) -- 6x AWS Certified badges auto-synced weekly.
+
 ## How It Works
 
 1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`
