@@ -11,7 +11,6 @@ No more manually updating badge images when you earn a new certification. This A
 - Fetches all badges from your Credly profile automatically
 - Categorizes badges into **Industry Certifications**, **Professional/Partner**, and **Knowledge/Learning**
 - Updates your README between markers (non-destructive -- only touches the badge section)
-- Dark/light theme support via Credly CDN
 - Configurable badge size, retry logic, and categorization keywords
 - Outputs badge counts for use in downstream workflow steps
 
