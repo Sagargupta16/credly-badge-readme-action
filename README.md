@@ -173,7 +173,7 @@ Override how badges are categorized using keywords matched against the badge nam
 
 ## Live Example
 
-See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#certifications--badges) -- 6x AWS Certified badges auto-synced weekly.
+See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#-certifications--badges) -- 6 industry certifications (5x AWS + Terraform) auto-synced weekly.
 
 ## How It Works
 
