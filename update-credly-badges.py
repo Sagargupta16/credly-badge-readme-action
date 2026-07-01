@@ -14,6 +14,7 @@ Usage standalone:
   CREDLY_USERNAME=your-username python update-credly-badges.py
 """
 
+import html
 import json
 import os
 import re
@@ -114,6 +115,14 @@ def badge_to_html(badge, size=BADGE_SIZE):
         "images.credly.com/images/",
         f"images.credly.com/size/{size}x{size}/images/",
     )
+
+    # Escape API-supplied values before interpolating into HTML attributes.
+    # name/image_url come from the Credly API response (untrusted); an
+    # unescaped quote or angle bracket would break out of the tag or corrupt
+    # the generated README markup.
+    name = html.escape(name)
+    badge_url = html.escape(badge_url)
+    sized_url = html.escape(sized_url)
 
     return (
         f'<a href="{badge_url}" title="{name}">'
