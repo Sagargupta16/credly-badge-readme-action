@@ -64,17 +64,20 @@ def fetch_badges(username):
             "User-Agent": "GitHub-Actions-Credly-Badge-Updater/1.0",
         },
     )
-    for attempt in range(MAX_RETRIES):
+    # Always attempt at least once; a non-positive MAX_RETRIES would otherwise
+    # skip the loop and return None, crashing later with a cryptic AttributeError.
+    attempts = max(1, MAX_RETRIES)
+    for attempt in range(attempts):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError) as e:
-            if attempt < MAX_RETRIES - 1:
+            if attempt < attempts - 1:
                 wait = 5 * (attempt + 1)
                 print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
                 time.sleep(wait)
             else:
-                print(f"ERROR: All {MAX_RETRIES} attempts failed for {url}")
+                print(f"ERROR: All {attempts} attempts failed for {url}")
                 raise
 
 
