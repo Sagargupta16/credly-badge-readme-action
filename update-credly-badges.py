@@ -14,6 +14,7 @@ Usage standalone:
   CREDLY_USERNAME=your-username python update-credly-badges.py
 """
 
+import html
 import json
 import os
 import re
@@ -64,17 +65,20 @@ def fetch_badges(username):
             "User-Agent": "GitHub-Actions-Credly-Badge-Updater/1.0",
         },
     )
-    for attempt in range(MAX_RETRIES):
+    # Always attempt at least once; a non-positive MAX_RETRIES would otherwise
+    # skip the loop and return None, crashing later with a cryptic AttributeError.
+    attempts = max(1, MAX_RETRIES)
+    for attempt in range(attempts):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError) as e:
-            if attempt < MAX_RETRIES - 1:
+            if attempt < attempts - 1:
                 wait = 5 * (attempt + 1)
                 print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
                 time.sleep(wait)
             else:
-                print(f"ERROR: All {MAX_RETRIES} attempts failed for {url}")
+                print(f"ERROR: All {attempts} attempts failed for {url}")
                 raise
 
 
@@ -111,6 +115,14 @@ def badge_to_html(badge, size=BADGE_SIZE):
         "images.credly.com/images/",
         f"images.credly.com/size/{size}x{size}/images/",
     )
+
+    # Escape API-supplied values before interpolating into HTML attributes.
+    # name/image_url come from the Credly API response (untrusted); an
+    # unescaped quote or angle bracket would break out of the tag or corrupt
+    # the generated README markup.
+    name = html.escape(name)
+    badge_url = html.escape(badge_url)
+    sized_url = html.escape(sized_url)
 
     return (
         f'<a href="{badge_url}" title="{name}">'
@@ -170,7 +182,11 @@ def update_readme(section_content):
         f"<!-- CREDLY-BADGES:START -->\n{section_content}\n<!-- CREDLY-BADGES:END -->"
     )
 
-    new_content, count = re.subn(pattern, replacement, content, flags=re.DOTALL)
+    # Use a lambda so backslash sequences in badge content (e.g. \g, \1)
+    # are treated as literal text, not regex replacement backreferences.
+    new_content, count = re.subn(
+        pattern, lambda _: replacement, content, flags=re.DOTALL
+    )
 
     if count == 0:
         print("ERROR: Could not find CREDLY-BADGES markers in README.")
