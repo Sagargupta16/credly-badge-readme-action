@@ -170,7 +170,11 @@ def update_readme(section_content):
         f"<!-- CREDLY-BADGES:START -->\n{section_content}\n<!-- CREDLY-BADGES:END -->"
     )
 
-    new_content, count = re.subn(pattern, replacement, content, flags=re.DOTALL)
+    # Use a lambda so backslash sequences in badge content (e.g. \g, \1)
+    # are treated as literal text, not regex replacement backreferences.
+    new_content, count = re.subn(
+        pattern, lambda _: replacement, content, flags=re.DOTALL
+    )
 
     if count == 0:
         print("ERROR: Could not find CREDLY-BADGES markers in README.")
