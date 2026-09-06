@@ -16,7 +16,7 @@ jobs:
       # Pinned: an unpinned ruff changed its default ruleset under CI and turned
       # an unchanged tree red. Renovate bumps this on its monthly schedule.
       - name: Install ruff
-        run: pip install ruff==0.16.6
+        run: "pip install --only-binary :all: ruff==0.16.6"
       - name: Lint
         run: ruff check .
 
@@ -33,6 +33,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pytest
-        run: pip install pytest
+        run: "pip install --only-binary :all: pytest==9.1.1"
       - name: Test
         run: pytest -v

@@ -32,7 +32,8 @@ def test_categorize_cert_wins_over_professional():
     badge = make_badge("Certified Partner: Technical")
     certs, professional, knowledge = mod.categorize_badges([badge])
     assert certs == [badge]
-    assert not professional and not knowledge
+    assert not professional
+    assert not knowledge
 
 
 def test_badge_to_html_sizes_and_escapes():
@@ -84,7 +85,8 @@ def test_update_readme_replaces_between_markers(tmp_path, monkeypatch, capsys):
     assert "old stuff" not in content
     # Backslash sequences must be kept literal, not treated as backreferences
     assert r"new badges \g<0>" in content
-    assert content.startswith("# Hi\n") and content.endswith("footer\n")
+    assert content.startswith("# Hi\n")
+    assert content.endswith("footer\n")
 
 
 def test_update_readme_no_change(tmp_path, monkeypatch):
