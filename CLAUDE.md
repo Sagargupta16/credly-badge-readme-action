@@ -32,7 +32,16 @@ Needs a `README.md` with the CREDLY-BADGES markers in cwd (or set `README_PATH`)
 
 ## Test
 
-No test suite. Verify by running the script standalone against a scratch README containing the markers, then eyeball the generated HTML.
+```
+uv run --with pytest python -m pytest -v
+uv run --with ruff ruff check .
+```
+
+`test_update_credly_badges.py` covers the pure functions (categorization, HTML escaping, marker splicing, empty-category skipping) with no network. `.github/workflows/ci.yml` runs the same lint and tests on every push to `main` and every PR, across Python 3.12/3.13/3.14 -- 3.13 is the version `action.yml` installs for consumers.
+
+Lint rules are pinned in `ruff.toml` and the ruff version is pinned in CI. Both are deliberate: ruff 0.16.6 added isort to its default ruleset and turned CI red on an unchanged tree.
+
+For an end-to-end check, run the script standalone against a scratch README containing the markers, then eyeball the generated HTML.
 
 ## Entry points
 
@@ -48,6 +57,8 @@ No test suite. Verify by running the script standalone against a scratch README 
 
 - Adding an input means touching three places in sync: `action.yml` inputs, `action.yml` env block, and the env read in the script.
 - `v1` is a moving major tag. After cutting a new `v1.x.y`, retag: `git tag -f v1 && git push -f origin v1`, and update `CHANGELOG.md`.
+- This retag has never actually been run. As of 2026-09-06 both `v1` and `v1.0.0` still dereference to the initial commit `53428cd` (2026-03-04), so consumers on `@v1` get Python 3.11, no `html.escape()`, and empty action outputs. Every fix since then is unreleased -- see `CHANGELOG.md` under Unreleased.
+- Composite action outputs need an explicit `value:` mapping plus an `id:` on the step that writes `$GITHUB_OUTPUT`. Declaring only a `description` makes every output silently resolve to an empty string.
 - Badge names/URLs from the Credly API are `html.escape()`d before interpolation -- untrusted data, keep it.
 - `update_readme` uses `re.subn` with a lambda replacement so backslashes in badge content are literal, not backreferences. Don't "simplify" it away.
 - `MAX_RETRIES <= 0` is intentionally clamped to 1 attempt in `fetch_badges`.
