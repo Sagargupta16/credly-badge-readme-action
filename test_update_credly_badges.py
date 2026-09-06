@@ -10,7 +10,9 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 
-def make_badge(name, badge_id="abc-123", image_url="https://images.credly.com/images/x/y.png"):
+def make_badge(
+    name, badge_id="abc-123", image_url="https://images.credly.com/images/x/y.png"
+):
     return {"id": badge_id, "badge_template": {"name": name, "image_url": image_url}}
 
 
@@ -41,6 +43,30 @@ def test_badge_to_html_sizes_and_escapes():
     assert 'href="https://www.credly.com/badges/id-1"' in tag
     assert "AI &quot;Expert&quot; &lt;Pro&gt;" in tag
     assert "<Pro>" not in tag
+
+
+def test_generate_section_skips_empty_categories():
+    knowledge = make_badge("Cloud Practitioner Essentials", badge_id="k-1")
+
+    section = mod.generate_section([], [], [knowledge])
+
+    assert "Industry Certifications" not in section
+    assert "Professional & Partner Badges" not in section
+    assert "Knowledge & Learning Badges" in section
+    # No stray blank line before the first rendered heading
+    assert not section.startswith("\n")
+
+
+def test_generate_section_renders_all_categories():
+    cert = make_badge("AWS Certified Solutions Architect", badge_id="c-1")
+    prof = make_badge("Partner: Technical", badge_id="p-1")
+    know = make_badge("Cloud Practitioner Essentials", badge_id="k-1")
+
+    section = mod.generate_section([cert], [prof], [know])
+
+    assert "Industry Certifications" in section
+    assert "Professional & Partner Badges" in section
+    assert "Knowledge & Learning Badges" in section
 
 
 def test_update_readme_replaces_between_markers(tmp_path, monkeypatch, capsys):

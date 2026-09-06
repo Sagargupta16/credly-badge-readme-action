@@ -20,8 +20,8 @@ import os
 import re
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 # Configuration from environment
 CREDLY_USERNAME = os.environ.get("CREDLY_USERNAME", "")
@@ -136,18 +136,20 @@ def generate_section(certifications, professional, knowledge):
     lines = []
 
     # Industry Certifications
-    lines.append("\U0001f3c5 **Industry Certifications**")
-    lines.append("")
-    lines.append('<div align="center">')
-    lines.append("")
-    for badge in certifications:
-        lines.append(badge_to_html(badge))
-    lines.append("")
-    lines.append("</div>")
+    if certifications:
+        lines.append("\U0001f3c5 **Industry Certifications**")
+        lines.append("")
+        lines.append('<div align="center">')
+        lines.append("")
+        for badge in certifications:
+            lines.append(badge_to_html(badge))
+        lines.append("")
+        lines.append("</div>")
 
     # Professional & Partner Badges
     if professional:
-        lines.append("")
+        if lines:
+            lines.append("")
         lines.append("\U0001f396\ufe0f **Professional & Partner Badges**")
         lines.append("")
         lines.append('<div align="center">')
@@ -159,7 +161,8 @@ def generate_section(certifications, professional, knowledge):
 
     # Knowledge & Learning Badges
     if knowledge:
-        lines.append("")
+        if lines:
+            lines.append("")
         lines.append("\U0001f4da **Knowledge & Learning Badges**")
         lines.append("")
         lines.append('<div align="center">')
