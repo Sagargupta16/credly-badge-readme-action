@@ -282,20 +282,21 @@ Security:
 
 ## Development
 
-The action itself has no dependencies -- the script is standard library only.
-`requirements-dev.txt` pins the two tools CI uses:
+No install step -- the script is standard library only. Tests and lint use `uv`:
 
 ```bash
 # Run the tests
-uv run --with-requirements requirements-dev.txt python -m pytest -v
+uv run --with pytest python -m pytest -v
 
 # Lint
-uv run --with-requirements requirements-dev.txt ruff check .
+uv run --with ruff ruff check .
 ```
 
 On every push to `main` and every pull request, CI runs `ruff check` on Python 3.13,
 `pytest` on 3.12, 3.13 and 3.14, and a third job that runs `action.yml` itself from the
-checkout and fails if any of the five outputs comes back empty.
+checkout and fails if any of the five outputs comes back empty. Both tool versions are
+pinned in `.github/workflows/ci.yml`, and `ruff check` there runs on the full default
+ruleset with no repo config.
 
 To run the script by hand without touching your real README, point `README_PATH` at a
 scratch file containing the two markers:

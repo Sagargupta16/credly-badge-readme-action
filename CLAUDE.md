@@ -33,13 +33,15 @@ Needs a `README.md` with the CREDLY-BADGES markers in cwd (or set `README_PATH`)
 ## Test
 
 ```
-uv run --with-requirements requirements-dev.txt python -m pytest -v
-uv run --with-requirements requirements-dev.txt ruff check .
+uv run --with pytest python -m pytest -v
+uv run --with ruff ruff check .
 ```
 
 `test_update_credly_badges.py` covers the pure functions (categorization, HTML escaping, marker splicing, empty-category skipping) with no network. `.github/workflows/ci.yml` has three jobs, on every push to `main` and every PR: `lint` (ruff, Python 3.13 only), `test` (pytest, matrixed over 3.12/3.13/3.14 -- 3.13 is the version `action.yml` installs for consumers), and `action`, which is the only job that loads `action.yml`: it runs the composite action from the checkout against a scratch README and fails if any of the five outputs comes back empty or if a step gated on `changed` gets skipped.
 
-Tool versions are pinned in `requirements-dev.txt` so a tool release cannot turn an unchanged tree red: ruff 0.16.0 grew its default ruleset from 59 rules to 413, which flagged `I001` on an unchanged import block here. Kept in a requirements file because Renovate reads `requirements*.txt` and does not read versions inside a workflow `run:` block. There is deliberately no `ruff.toml`: an earlier one cut enforcement to 100 rules, and the tree passes the full 413 anyway.
+`ruff==0.16.6` and `pytest==9.1.1` are pinned inline in `ci.yml` so a tool release cannot turn an unchanged tree red: ruff 0.16.0 grew its default ruleset from 59 rules to 413, which flagged `I001` on an unchanged import block here. Bump them by hand; Renovate's github-actions manager reads `uses:`/`with:`/`container:`/`services:`/`runs-on:`, not `run:` text. A `requirements-dev.txt` does not work here either: SonarCloud rule `githubactions:S8544` fails the quality gate when the installed versions are not visible at the `pip install` site (measured on PR #8).
+
+There is deliberately no `ruff.toml`: an earlier one cut enforcement from ruff's 413 default rules to 100, and the tree passes the full default set anyway. That narrowing hid a real finding, `EXE001` on the script's shebang, which is why `update-credly-badges.py` is mode 100755 in git.
 
 For an end-to-end check by hand, run the script standalone against a scratch README containing the markers, then eyeball the generated HTML.
 

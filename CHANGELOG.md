@@ -13,6 +13,7 @@ and none of the entries below have reached them.
 - Treat badge content as literal text in the `re.subn` replacement, so backslash sequences in a badge name are no longer read as regex backreferences (2026-07-01).
 - Skip the "Industry Certifications" heading when no badge matches the certification keywords, instead of emitting the heading above an empty `<div>`.
 - Sort imports so `ruff check .` passes under ruff 0.16.0 and later, whose default ruleset grew from 59 rules to 413 and now flags the unsorted stdlib imports as `I001`.
+- Record `update-credly-badges.py` as mode 100755 in git, so the shebang it carries is actually usable on checkout (`EXE001`).
 
 ### Changed
 
@@ -21,7 +22,7 @@ and none of the entries below have reached them.
 ### Added
 
 - Unit test suite for the pure functions, no network required (2026-07-03).
-- CI workflow running ruff and pytest (2026-07-04), now with a Python 3.12/3.13/3.14 test matrix and tool versions pinned in `requirements-dev.txt`.
+- CI workflow running ruff and pytest (2026-07-04), now with a Python 3.12/3.13/3.14 test matrix and pinned tool versions.
 - CI job that runs `action.yml` from the checkout against a scratch README and fails if any declared output resolves to an empty string. Nothing else in CI loads `action.yml`.
 - README sections covering troubleshooting, categorization behavior, version pinning, and local development.
 

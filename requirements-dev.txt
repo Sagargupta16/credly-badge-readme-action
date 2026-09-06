@@ -1,9 +1,0 @@
-# Dev and CI only. The action itself is standard library only and installs nothing.
-#
-# Versions are pinned so a tool release cannot turn an unchanged tree red: ruff
-# 0.16.0 grew its default ruleset from 59 rules to 413, which added I001 to an
-# unchanged import block here. Kept in a requirements file rather than inline in
-# ci.yml because Renovate's pip_requirements manager reads requirements*.txt and
-# does not read version strings inside a workflow `run:` block.
-ruff==0.16.6
-pytest==9.1.1
