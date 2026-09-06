@@ -32,7 +32,18 @@ Needs a `README.md` with the CREDLY-BADGES markers in cwd (or set `README_PATH`)
 
 ## Test
 
-No test suite. Verify by running the script standalone against a scratch README containing the markers, then eyeball the generated HTML.
+```
+uv run --with pytest python -m pytest -v
+uv run --with ruff ruff check .
+```
+
+`test_update_credly_badges.py` covers the pure functions (categorization, HTML escaping, marker splicing, empty-category skipping) with no network. `.github/workflows/ci.yml` has three jobs, on every push to `main` and every PR: `lint` (ruff, Python 3.13 only), `test` (pytest, matrixed over 3.12/3.13/3.14 -- 3.13 is the version `action.yml` installs for consumers), and `action`, which is the only job that loads `action.yml`: it runs the composite action from the checkout against a scratch README and fails if any of the five outputs comes back empty or if a step gated on `changed` gets skipped.
+
+`ruff==0.16.6` and `pytest==9.1.1` are pinned inline in `ci.yml` so a tool release cannot turn an unchanged tree red: ruff 0.16.0 grew its default ruleset from 59 rules to 413, which flagged `I001` on an unchanged import block here. Bump them by hand; Renovate's github-actions manager reads `uses:`/`with:`/`container:`/`services:`/`runs-on:`, not `run:` text. A `requirements-dev.txt` does not work here either: SonarCloud rule `githubactions:S8544` fails the quality gate when the installed versions are not visible at the `pip install` site (measured on PR #8).
+
+There is deliberately no `ruff.toml`: an earlier one cut enforcement from ruff's 413 default rules to 100, and the tree passes the full default set anyway. That narrowing hid a real finding, `EXE001` on the script's shebang, which is why `update-credly-badges.py` is mode 100755 in git.
+
+For an end-to-end check by hand, run the script standalone against a scratch README containing the markers, then eyeball the generated HTML.
 
 ## Entry points
 
@@ -48,6 +59,9 @@ No test suite. Verify by running the script standalone against a scratch README 
 
 - Adding an input means touching three places in sync: `action.yml` inputs, `action.yml` env block, and the env read in the script.
 - `v1` is a moving major tag. After cutting a new `v1.x.y`, retag: `git tag -f v1 && git push -f origin v1`, and update `CHANGELOG.md`.
+- This retag has never actually been run. As of 2026-09-06 both `v1` and `v1.0.0` still dereference to the initial commit `53428cd` (2026-03-04), so consumers on `@v1` get Python 3.11, no `html.escape()`, and empty action outputs. Every fix since then is unreleased -- see `CHANGELOG.md` under Unreleased.
+- Moving the `v1` tag does not reach the one known consumer. `Sagargupta16/Sagargupta16/.github/workflows/update-credly-badges.yml` pins `@53428cd4bf0496ade08bbc52632b6f540b029af0 # v1`, so a release means three steps: tag `v1.x.y`, move `v1`, then re-pin that workflow to the new SHA. Confirmed broken there on 2026-09-06: run 33414078659 (2026-08-31) logged "README updated with latest Credly badges." and "Changes detected:", while its commit step, gated on `steps.credly.outputs.changed == 'true'`, was skipped.
+- Composite action outputs need an explicit `value:` mapping plus an `id:` on the step that writes `$GITHUB_OUTPUT`. Declaring only a `description` makes every output silently resolve to an empty string.
 - Badge names/URLs from the Credly API are `html.escape()`d before interpolation -- untrusted data, keep it.
 - `update_readme` uses `re.subn` with a lambda replacement so backslashes in badge content are literal, not backreferences. Don't "simplify" it away.
 - `MAX_RETRIES <= 0` is intentionally clamped to 1 attempt in `fetch_badges`.

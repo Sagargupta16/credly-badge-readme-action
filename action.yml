@@ -34,14 +34,19 @@ inputs:
 outputs:
   total-badges:
     description: "Total number of badges found"
+    value: ${{ steps.run-updater.outputs.total-badges }}
   certifications-count:
     description: "Number of industry certifications"
+    value: ${{ steps.run-updater.outputs.certifications-count }}
   professional-count:
     description: "Number of professional/partner badges"
+    value: ${{ steps.run-updater.outputs.professional-count }}
   knowledge-count:
     description: "Number of knowledge/learning badges"
+    value: ${{ steps.run-updater.outputs.knowledge-count }}
   changed:
     description: "Whether the README was updated (true/false)"
+    value: ${{ steps.run-updater.outputs.changed }}
 
 runs:
   using: "composite"
@@ -52,6 +57,7 @@ runs:
         python-version: "3.13"
 
     - name: Run Credly badge updater
+      id: run-updater
       shell: bash
       env:
         CREDLY_USERNAME: ${{ inputs.credly-username }}

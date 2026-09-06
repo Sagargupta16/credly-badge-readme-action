@@ -2,19 +2,97 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
-      - name: Install tools
-        run: pip install ruff pytest
+          python-version: "3.13"
+      # Version pinned deliberately: ruff 0.16.0 grew its default ruleset from 59
+      # rules to 413, which turned an unchanged tree red. Bump it here by hand,
+      # Renovate does not read versions inside a `run:` block.
+      - name: Install ruff
+        run: "pip install --only-binary :all: ruff==0.16.6"
       - name: Lint
         run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 is what action.yml installs for consumers, so it must be covered.
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: "pip install --only-binary :all: pytest==9.1.1"
       - name: Test
         run: pytest -v
+
+  action:
+    # The only job that runs action.yml itself. Lint and test never load it, so a
+    # broken output mapping cannot be caught by them: every declared output would
+    # resolve to an empty string and both jobs would still be green.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create a scratch README with the markers
+        run: printf '<!-- CREDLY-BADGES:START -->\n<!-- CREDLY-BADGES:END -->\n' > scratch-readme.md
+
+      - name: Run the action from this checkout
+        id: credly
+        uses: ./
+        with:
+          # A real public Credly profile: this reads the live badges.json endpoint,
+          # which is the action's only data source.
+          credly-username: sagar-gupta.f8eb96cc
+          readme-path: scratch-readme.md
+
+      # Reproduces what a consumer does with the changed output. If the output is
+      # empty this step is skipped and the assertion below fails.
+      - name: Step gated on the changed output
+        id: gated
+        if: steps.credly.outputs.changed == 'true'
+        run: echo "ran=true" >> "$GITHUB_OUTPUT"
+
+      - name: Assert every output resolved
+        env:
+          TOTAL: ${{ steps.credly.outputs.total-badges }}
+          CERTS: ${{ steps.credly.outputs.certifications-count }}
+          PROF: ${{ steps.credly.outputs.professional-count }}
+          KNOW: ${{ steps.credly.outputs.knowledge-count }}
+          CHANGED: ${{ steps.credly.outputs.changed }}
+          GATED: ${{ steps.gated.outputs.ran }}
+        run: |
+          set -euo pipefail
+          echo "total-badges=$TOTAL certifications-count=$CERTS professional-count=$PROF knowledge-count=$KNOW changed=$CHANGED"
+          for pair in "total-badges=$TOTAL" "certifications-count=$CERTS" \
+                      "professional-count=$PROF" "knowledge-count=$KNOW" "changed=$CHANGED"; do
+            if [ -z "${pair#*=}" ]; then
+              echo "::error::output ${pair%%=*} resolved to an empty string"
+              exit 1
+            fi
+          done
+          case "$TOTAL" in
+            ''|*[!0-9]*) echo "::error::total-badges is not a number: '$TOTAL'"; exit 1 ;;
+          esac
+          if [ "$CHANGED" != "true" ]; then
+            echo "::error::expected changed=true when writing a fresh scratch README, got '$CHANGED'"
+            exit 1
+          fi
+          if [ "$GATED" != "true" ]; then
+            echo "::error::a step gated on steps.<id>.outputs.changed did not run"
+            exit 1
+          fi
+          grep -q '<a href="https://www.credly.com/badges/' scratch-readme.md
+          echo "All five outputs resolved and the gated step ran."
