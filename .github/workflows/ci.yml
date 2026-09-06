@@ -2,19 +2,37 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
-      - name: Install tools
-        run: pip install ruff pytest
+          python-version: "3.13"
+      # Pinned: an unpinned ruff changed its default ruleset under CI and turned
+      # an unchanged tree red. Renovate bumps this on its monthly schedule.
+      - name: Install ruff
+        run: pip install ruff==0.16.6
       - name: Lint
         run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 is what action.yml installs for consumers, so it must be covered.
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: pip install pytest
       - name: Test
         run: pytest -v

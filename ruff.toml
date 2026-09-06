@@ -1,0 +1,14 @@
+# Explicit lint config so a newer ruff's default ruleset cannot change what CI
+# enforces underneath us. Ruff 0.16.6 added isort (I) to its defaults, which
+# turned CI red on an unchanged tree; pin the rules here and the version in CI.
+target-version = "py313"
+
+[lint]
+select = [
+  "E4", # import formatting
+  "E7", # statement-level errors
+  "E9", # syntax/IO errors
+  "F",  # pyflakes
+  "I",  # import sorting
+  "B",  # flake8-bugbear
+]
