@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-Everything below is on `main` but not yet released. The `v1` and `v1.0.0` tags both
-still point at the initial commit, so consumers on `@v1` are running the 2026-03-04
-code and none of the fixes listed below have reached them.
+Nothing below has been released. The `v1` and `v1.0.0` tags both still dereference to
+the initial commit `53428cd` (2026-03-04), so consumers on `@v1` are running that code
+and none of the entries below have reached them.
 
 ### Fixed
 
@@ -12,7 +12,7 @@ code and none of the fixes listed below have reached them.
 - HTML-escape all Credly-supplied badge names and URLs before interpolating them into the README (2026-07-03).
 - Treat badge content as literal text in the `re.subn` replacement, so backslash sequences in a badge name are no longer read as regex backreferences (2026-07-01).
 - Skip the "Industry Certifications" heading when no badge matches the certification keywords, instead of emitting the heading above an empty `<div>`.
-- Sort imports so `ruff check .` passes under ruff 0.16.6, whose default ruleset added isort.
+- Sort imports so `ruff check .` passes under ruff 0.16.0 and later, whose default ruleset grew from 59 rules to 413 and now flags the unsorted stdlib imports as `I001`.
 
 ### Changed
 
@@ -21,8 +21,9 @@ code and none of the fixes listed below have reached them.
 ### Added
 
 - Unit test suite for the pure functions, no network required (2026-07-03).
-- CI workflow running ruff and pytest (2026-07-04), now with a pinned ruff version, an explicit `ruff.toml` ruleset, and a Python 3.12/3.13/3.14 test matrix.
-- README sections covering troubleshooting, non-AWS categorization keywords, version pinning, and local development.
+- CI workflow running ruff and pytest (2026-07-04), now with a Python 3.12/3.13/3.14 test matrix and tool versions pinned in `requirements-dev.txt`.
+- CI job that runs `action.yml` from the checkout against a scratch README and fails if any declared output resolves to an empty string. Nothing else in CI loads `action.yml`.
+- README sections covering troubleshooting, categorization behavior, version pinning, and local development.
 
 ## [1.0.0] - 2026-03-04
 

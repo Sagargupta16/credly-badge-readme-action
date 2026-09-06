@@ -2,7 +2,7 @@
 
 [![Marketplace](https://img.shields.io/badge/marketplace-credly--badge--readme--updater-2088FF?style=flat-square&logo=github)](https://github.com/marketplace/actions/credly-badge-readme-updater)
 [![Stars](https://img.shields.io/github/stars/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action)
-[![Forks](https://img.shields.io/github/forks/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action/network/members)
+[![Forks](https://img.shields.io/github/forks/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action)
 [![License](https://img.shields.io/github/license/Sagargupta16/credly-badge-readme-action?style=flat-square)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action/commits/main)
 
@@ -100,10 +100,8 @@ That's it. Your badges will auto-update every Monday.
 | `knowledge-count` | Number of knowledge/learning badges |
 | `changed` | Whether the README was updated (`true`/`false`) |
 
-> **Note:** these outputs were declared without a `value:` mapping in the `v1.0.0`
-> release, which made all five resolve to an empty string. If a step of yours reads
-> `steps.<id>.outputs.changed` and never fires, you are on a release that predates the
-> fix -- see [Pinning and security](#pinning-and-security).
+> **Note:** on the published `v1.0.0` these five outputs all resolve to an empty string.
+> See [Pinning and security](#pinning-and-security).
 
 ## Example Output
 
@@ -113,37 +111,29 @@ The action generates up to three categorized sections, rendering at the default
 **Industry Certifications**
 
 <div align="center">
-<img src="https://images.credly.com/size/100x100/images/0e284c3f-5164-4b21-8660-0d84737941bc/image.png" width="100" height="100" alt="AWS Solutions Architect">
-<img src="https://images.credly.com/size/100x100/images/b9feab85-1a43-4f6c-99a5-631b88d5461b/image.png" width="100" height="100" alt="AWS Developer">
-<img src="https://images.credly.com/size/100x100/images/0dc62494-dc94-469a-83af-e35309f27356/blob" width="100" height="100" alt="Terraform Associate">
+<a href="https://www.credly.com/badges/591e74ef-f6a8-4b77-82dc-07e06fb8060e" title="AWS Solutions Architect"><img src="https://images.credly.com/size/100x100/images/0e284c3f-5164-4b21-8660-0d84737941bc/image.png" alt="AWS Solutions Architect" width="100" height="100"></a>
+<a href="https://www.credly.com/badges/be7f9e0a-593a-4544-8dfd-f69f669ec57d" title="AWS Developer"><img src="https://images.credly.com/size/100x100/images/b9feab85-1a43-4f6c-99a5-631b88d5461b/image.png" alt="AWS Developer" width="100" height="100"></a>
+<a href="https://www.credly.com/badges/8b0723a5-bac7-4262-b5b6-20337b2979a1" title="Terraform Associate"><img src="https://images.credly.com/size/100x100/images/0dc62494-dc94-469a-83af-e35309f27356/blob" alt="Terraform Associate" width="100" height="100"></a>
 </div>
 
 **Professional & Partner Badges**
 
 <div align="center">
-<img src="https://images.credly.com/size/100x100/images/b870667f-00a3-48d7-b988-9c02b441b883/image.png" width="100" height="100" alt="Well-Architected">
-<img src="https://images.credly.com/size/100x100/images/a5e0f58e-77c2-452d-b81d-79981315f238/blob" width="100" height="100" alt="GenAI Technical">
+<a href="https://www.credly.com/badges/ea4a5540-aa93-4f8b-96d2-9bf31de86f72" title="Well-Architected"><img src="https://images.credly.com/size/100x100/images/b870667f-00a3-48d7-b988-9c02b441b883/image.png" alt="Well-Architected" width="100" height="100"></a>
+<a href="https://www.credly.com/badges/4850c937-dcee-4f8f-9e1c-50263e4e7f92" title="GenAI Technical"><img src="https://images.credly.com/size/100x100/images/a5e0f58e-77c2-452d-b81d-79981315f238/blob" alt="GenAI Technical" width="100" height="100"></a>
 </div>
 
 **Knowledge & Learning Badges**
 
 <div align="center">
-<img src="https://images.credly.com/size/100x100/images/7cf036b0-c609-4378-a7be-9969e1dea7ab/blob" width="100" height="100" alt="Cloud Essentials">
-<img src="https://images.credly.com/size/100x100/images/519a6dba-f145-4c1a-85a2-1d173d6898d9/image.png" width="100" height="100" alt="Architecting">
+<a href="https://www.credly.com/badges/d03e1d39-4e40-483d-9845-f11da0d01170" title="Cloud Essentials"><img src="https://images.credly.com/size/100x100/images/7cf036b0-c609-4378-a7be-9969e1dea7ab/blob" alt="Cloud Essentials" width="100" height="100"></a>
+<a href="https://www.credly.com/badges/ca2a1336-e6e0-4e76-aa97-a919759d26d3" title="Architecting"><img src="https://images.credly.com/size/100x100/images/519a6dba-f145-4c1a-85a2-1d173d6898d9/image.png" alt="Architecting" width="100" height="100"></a>
 </div>
 
-Two details the preview above cannot show:
-
-- **Every badge is a link.** Each `<img>` is wrapped in an anchor pointing at that
-  badge's Credly verification page, so readers can click through to verify it. The
-  emitted markup per badge is:
-
-  ```html
-  <a href="https://www.credly.com/badges/BADGE-ID" title="Badge Name"><img src="https://images.credly.com/size/100x100/images/.../image.png" alt="Badge Name" width="100" height="100"></a>
-  ```
-
-- **Each heading is prefixed with an emoji** (a medal for certifications, a military
-  medal for professional/partner, books for knowledge/learning).
+Each badge is an anchor to its Credly verification page, exactly as shown above. Two
+simplifications in this preview: the real output uses the full badge name from the API
+for `alt` and `title`, and it prefixes every heading with an emoji (a sports medal, a
+military medal, books).
 
 A category with no matching badges is skipped entirely, heading included.
 
@@ -165,19 +155,9 @@ Matching is a **case-sensitive substring test** against each badge's
 `badge_template.name` from the Credly API. Certification keywords are tested first, so
 a badge matching both lists lands in Industry Certifications.
 
-The defaults (`Certified` plus four AWS partner strings) are AWS-shaped. If your badges
-come from another issuer, the defaults will drop most of them into Knowledge & Learning.
-Starting points for other issuers:
-
-| Issuer | Suggested `cert-keywords` |
-|--------|---------------------------|
-| Google Cloud | `Professional Cloud,Associate Cloud,Cloud Digital Leader` |
-| Microsoft / Azure | `Certified:` |
-| HashiCorp | `Certified:` |
-| Kubernetes / CNCF | `Certified` |
-
-Treat these as starting points, not guarantees -- issuers rename badges. Check your own
-badge names against the API response before settling on keywords:
+The defaults (`Certified` plus four AWS partner strings) are AWS-shaped, and anything
+matching neither list lands in Knowledge & Learning. Pick keywords from your own badge
+names rather than guessing, since issuers word and rename them differently:
 
 ```bash
 curl -s "https://www.credly.com/users/YOUR-USERNAME/badges.json" \
@@ -222,7 +202,7 @@ curl -s "https://www.credly.com/users/YOUR-USERNAME/badges.json" \
 
 ## Live Example
 
-See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#-certifications--badges) -- 6 industry certifications (5x AWS + Terraform) auto-synced weekly.
+See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#-certifications--badges) -- 6 industry certifications (5x AWS + Terraform). That workflow runs weekly, but it gates its commit step on the `changed` output while pinned to a release where that output is empty, so it commits nothing until it is re-pinned.
 
 ## How It Works
 
@@ -253,10 +233,9 @@ workflow does that. Check, in order:
 
 1. The job has `permissions: contents: write`.
 2. Your workflow actually has a commit-and-push step (see [Quick Start](#2-create-the-workflow)).
-3. If that step is gated on `if: steps.<id>.outputs.changed == 'true'`, confirm you are
-   not on a release where the outputs are empty -- see [Pinning and security](#pinning-and-security).
-   A quick way to tell them apart: an empty output makes the step show as skipped even
-   though the log above it says "README updated with latest Credly badges."
+3. If that step is gated on `if: steps.<id>.outputs.changed == 'true'` and shows as
+   skipped while the log above it reads "README updated with latest Credly badges.",
+   the output is empty: see [Pinning and security](#pinning-and-security).
 
 ### Every badge lands under "Knowledge & Learning"
 
@@ -283,14 +262,15 @@ accepted badges.
 Pin to a full commit SHA and record the human-readable version in a trailing comment:
 
 ```yaml
-- uses: Sagargupta16/credly-badge-readme-action@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0 # v1.1.0
+- uses: Sagargupta16/credly-badge-readme-action@53428cd4bf0496ade08bbc52632b6f540b029af0 # v1.0.0
 ```
 
-`@v1` is a moving major tag, so it changes under you; a SHA does not. Whichever you use,
-note that a release older than the outputs fix will leave all five outputs empty.
+`@v1` is a moving major tag, so it changes under you; a SHA does not. Today they are the
+same code either way: `v1` and `v1.0.0` both dereference to `53428cd` (2026-03-04), which
+predates the outputs fix, so all five outputs are empty strings on both. Re-pin once a
+newer release is tagged.
 
-Security properties worth knowing, since this action writes third-party API data into
-your README:
+Security:
 
 - **No secrets.** The action takes no token and needs none. It reads one public,
   unauthenticated endpoint: `https://www.credly.com/users/{username}/badges.json`.
@@ -302,18 +282,20 @@ your README:
 
 ## Development
 
-No install step -- the script is standard library only. Tests and lint use `uv`:
+The action itself has no dependencies -- the script is standard library only.
+`requirements-dev.txt` pins the two tools CI uses:
 
 ```bash
 # Run the tests
-uv run --with pytest python -m pytest -v
+uv run --with-requirements requirements-dev.txt python -m pytest -v
 
 # Lint
-uv run --with ruff ruff check .
+uv run --with-requirements requirements-dev.txt ruff check .
 ```
 
-CI runs the same lint and tests on every push to `main` and every pull request, across
-Python 3.12, 3.13, and 3.14.
+On every push to `main` and every pull request, CI runs `ruff check` on Python 3.13,
+`pytest` on 3.12, 3.13 and 3.14, and a third job that runs `action.yml` itself from the
+checkout and fails if any of the five outputs comes back empty.
 
 To run the script by hand without touching your real README, point `README_PATH` at a
 scratch file containing the two markers:
@@ -323,14 +305,6 @@ printf '<!-- CREDLY-BADGES:START -->\n<!-- CREDLY-BADGES:END -->\n' > /tmp/scrat
 CREDLY_USERNAME=your-username README_PATH=/tmp/scratch.md python update-credly-badges.py
 cat /tmp/scratch.md
 ```
-
-## More AI Developer Tools
-
-| Repo | What it does |
-|------|--------------|
-| [ai-git-hooks](https://github.com/Sagargupta16/ai-git-hooks) | AI-powered git hooks -- auto-review diffs, generate commit messages, scan for secrets |
-| [claude-cost-optimizer](https://github.com/Sagargupta16/claude-cost-optimizer) | Strategies, benchmarks, and configs for cutting Claude Code costs |
-| [mcp-toolkit](https://github.com/Sagargupta16/mcp-toolkit) | TypeScript middleware toolkit for MCP servers -- auth, caching, rate limiting, CORS, logging |
 
 ## License
 
