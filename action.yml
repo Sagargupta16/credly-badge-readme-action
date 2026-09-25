@@ -30,6 +30,26 @@ inputs:
     description: "Comma-separated keywords to identify professional/partner badges"
     required: false
     default: "Partner: Technical,Generative AI Technical Intermediate,AI Foundational,Well-Architected Proficient"
+  output:
+    description: "What to write: readme (the section between the markers), svg (one self-contained animated SVG card of every badge), or both"
+    required: false
+    default: "readme"
+  svg-path:
+    description: "Where to write the SVG card when output is svg or both; missing folders are created"
+    required: false
+    default: "assets/credly-badges.svg"
+  svg-groups:
+    description: "SVG card grouping: two (industry certifications, then every other badge as learning and partner badges) or three (the README's three categories)"
+    required: false
+    default: "two"
+  svg-per-row:
+    description: "Comma-separated badges per row for each SVG group, 1 to 12; the last value repeats for later groups"
+    required: false
+    default: "6,8"
+  accent:
+    description: "Hex color of the SVG card's group labels"
+    required: false
+    default: "#60a5fa"
 
 outputs:
   total-badges:
@@ -45,16 +65,25 @@ outputs:
     description: "Number of knowledge/learning badges"
     value: ${{ steps.run-updater.outputs.knowledge-count }}
   changed:
-    description: "Whether the README was updated (true/false)"
+    description: "Whether the README or the SVG card was updated (true/false)"
     value: ${{ steps.run-updater.outputs.changed }}
 
 runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.13"
+
+    # Pillow only shrinks the badge images inlined into the SVG card, so README
+    # mode skips it. Pinned by hand: Renovate does not read versions in a run: block.
+    - name: Install Pillow for the SVG card
+      if: inputs.output != 'readme'
+      shell: bash
+      # block scalar: a bare ':all:' value would parse as a YAML mapping
+      run: |
+        python -m pip install --quiet --only-binary :all: pillow==12.3.0
 
     - name: Run Credly badge updater
       id: run-updater
@@ -66,4 +95,9 @@ runs:
         MAX_RETRIES: ${{ inputs.max-retries }}
         CERT_KEYWORDS: ${{ inputs.cert-keywords }}
         PROFESSIONAL_KEYWORDS: ${{ inputs.professional-keywords }}
+        OUTPUT: ${{ inputs.output }}
+        SVG_PATH: ${{ inputs.svg-path }}
+        SVG_GROUPS: ${{ inputs.svg-groups }}
+        SVG_PER_ROW: ${{ inputs.svg-per-row }}
+        ACCENT: ${{ inputs.accent }}
       run: python "${{ github.action_path }}/update-credly-badges.py"

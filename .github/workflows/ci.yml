@@ -9,8 +9,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       # Version pinned deliberately: ruff 0.16.0 grew its default ruleset from 59
@@ -29,8 +29,8 @@ jobs:
         # 3.13 is what action.yml installs for consumers, so it must be covered.
         python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pytest
@@ -44,7 +44,7 @@ jobs:
     # resolve to an empty string and both jobs would still be green.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Create a scratch README with the markers
         run: printf '<!-- CREDLY-BADGES:START -->\n<!-- CREDLY-BADGES:END -->\n' > scratch-readme.md
@@ -96,3 +96,16 @@ jobs:
           fi
           grep -q '<a href="https://www.credly.com/badges/' scratch-readme.md
           echo "All five outputs resolved and the gated step ran."
+
+      # Second run, in SVG mode: this is the only place the Pillow install step and
+      # the live badge-image fetch run, so a broken pin or CDN change fails here.
+      - name: Run the action in SVG mode
+        uses: ./
+        with:
+          credly-username: sagar-gupta.f8eb96cc
+          output: svg
+          svg-path: scratch.svg
+
+      - name: Assert the SVG card exists and parses as XML
+        run: |
+          python -c "import xml.etree.ElementTree as ET; n = len(ET.parse('scratch.svg').getroot().findall('.//{http://www.w3.org/2000/svg}image')); assert n, 'scratch.svg has no badge images'; print(f'scratch.svg parses as XML with {n} badge images')"
