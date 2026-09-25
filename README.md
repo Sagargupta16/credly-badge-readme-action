@@ -17,6 +17,7 @@ No more manually updating badge images when you earn a new certification. This A
 - Fetches all badges from your Credly profile automatically
 - Categorizes badges into **Industry Certifications**, **Professional/Partner**, and **Knowledge/Learning**
 - Updates your README between markers (non-destructive -- only touches the badge section)
+- Optional [SVG card mode](#svg-card-mode): every badge in one self-hosted, animated SVG
 - Configurable badge size, retry logic, and categorization keywords
 - Outputs badge counts for use in downstream workflow steps
 
@@ -52,7 +53,7 @@ jobs:
   update-badges:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Update Credly badges
         uses: Sagargupta16/credly-badge-readme-action@v1
@@ -85,10 +86,15 @@ That's it. Your badges will auto-update every Monday.
 |-------|----------|---------|-------------|
 | `credly-username` | Yes | - | Your Credly username from your profile URL |
 | `readme-path` | No | `README.md` | Path to your README file |
-| `badge-size` | No | `100` | Badge image size in pixels |
+| `badge-size` | No | `100` | Badge image size in pixels (README mode) |
 | `max-retries` | No | `3` | Max retry attempts for Credly API calls |
 | `cert-keywords` | No | `Certified` | Comma-separated keywords to identify industry certifications |
 | `professional-keywords` | No | `Partner: Technical,...` | Comma-separated keywords for professional/partner badges |
+| `output` | No | `readme` | `readme` updates the marker section, `svg` writes the [SVG card](#svg-card-mode), `both` does both |
+| `svg-path` | No | `assets/credly-badges.svg` | Where the SVG card is written; missing folders are created |
+| `svg-groups` | No | `two` | SVG grouping: `two` (certifications, then every other badge) or `three` (the README's categories) |
+| `svg-per-row` | No | `6,8` | Badges per row for each SVG group, 1 to 12; the last value repeats for later groups |
+| `accent` | No | `#60a5fa` | Hex color of the SVG group labels; quote it, an unquoted `#` starts a YAML comment |
 
 ## Outputs
 
@@ -98,7 +104,7 @@ That's it. Your badges will auto-update every Monday.
 | `certifications-count` | Number of industry certifications |
 | `professional-count` | Number of professional/partner badges |
 | `knowledge-count` | Number of knowledge/learning badges |
-| `changed` | Whether the README was updated (`true`/`false`) |
+| `changed` | Whether the README or the SVG card was updated (`true`/`false`) |
 
 > **Note:** on the published `v1.0.0` these five outputs all resolve to an empty string.
 > See [Pinning and security](#pinning-and-security).
@@ -136,6 +142,78 @@ for `alt` and `title`, and it prefixes every heading with an emoji (a sports med
 military medal, books).
 
 A category with no matching badges is skipped entirely, heading included.
+
+## SVG card mode
+
+Set `output: svg` and the action draws every badge into one self-hosted, animated SVG
+card instead of editing a README section; `output: both` does both. Available from
+`v1.1.0`.
+
+![Every Credly badge drawn as one animated SVG card](examples/credly-badges.svg)
+
+The card is a single file that loads nothing else. GitHub serves README images through
+an `<img>`, which cannot fetch external resources, so the action downloads each badge
+image from `images.credly.com` when it runs and inlines it as a data URI. The fade-in,
+float and shine are CSS and SMIL only. With the pinned Pillow, the same badges render
+the same bytes on every run, so `git diff` is an exact change check.
+
+- **Grouping** reuses `cert-keywords` and `professional-keywords`. `svg-groups: two`
+  (the default) draws industry certifications, then every other badge as "Learning and
+  partner badges"; `three` keeps the README's three categories.
+- **Layout**: `svg-per-row` sets the badges per row for each group, comma-separated
+  (default `6,8`), and the last value repeats for later groups. If a row gets more
+  badges than the design has room for, badges and labels shrink to fit their column.
+- **Labels**: en and em dashes in badge titles become plain hyphens, and the label
+  under each badge drops common issuer prefixes such as `AWS Certified` and
+  `HashiCorp Certified:`. The full titles stay in the card's `aria-label`.
+- **Color**: `accent` sets the group label color. Quote it (`accent: "#f59e0b"`),
+  since an unquoted `#` starts a YAML comment.
+- **Size**: when `output` is not `readme`, the action installs one pinned wheel,
+  `pillow==12.3.0`, and shrinks each image to twice its drawn size, sharp on
+  high-density screens. The example above holds 22 badges in about 390 KB. README mode
+  installs nothing.
+
+A workflow that renders the card weekly and commits it only when git sees a change:
+
+```yaml
+name: Update Credly badge card
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 9 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-card:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Render the Credly badge card
+        uses: Sagargupta16/credly-badge-readme-action@v1
+        with:
+          credly-username: "your-credly-username"
+          output: svg
+
+      - name: Commit the card if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/credly-badges.svg
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update Credly badge card"
+            git push
+          fi
+```
+
+Then show the card in your README, linked to your Credly profile:
+
+```markdown
+[![My Credly badges](assets/credly-badges.svg)](https://www.credly.com/users/your-credly-username)
+```
 
 ## Advanced Usage
 
@@ -210,7 +288,8 @@ See this action in use on [@Sagargupta16's profile README](https://github.com/Sa
 2. Categorizes each badge based on its name (using configurable keywords)
 3. Generates HTML with linked badge images from Credly's CDN
 4. Replaces content between `<!-- CREDLY-BADGES:START -->` and `<!-- CREDLY-BADGES:END -->` markers in your README
-5. Reports badge counts via action outputs
+5. With `output: svg` or `both`, downloads each badge image, inlines it as a data URI and writes one SVG card to `svg-path` (with `svg`, steps 3 and 4 are skipped)
+6. Reports badge counts via action outputs
 
 ## Troubleshooting
 
@@ -273,16 +352,22 @@ newer release is tagged.
 Security:
 
 - **No secrets.** The action takes no token and needs none. It reads one public,
-  unauthenticated endpoint: `https://www.credly.com/users/{username}/badges.json`.
-- **No third-party dependencies.** The script is Python standard library only, so there
-  is no transitive package tree to audit.
+  unauthenticated endpoint: `https://www.credly.com/users/{username}/badges.json`. In
+  SVG mode it also downloads the badge images, only from `https://images.credly.com/`;
+  an image URL on any other host is refused.
+- **No third-party dependencies in README mode.** The script is Python standard library
+  only, so there is no transitive package tree to audit. SVG mode adds exactly one
+  package, `pillow==12.3.0`, installed as a prebuilt wheel (`--only-binary :all:`, so no
+  build step runs) and only when `output` is not `readme`.
 - **API data is escaped.** Badge names and URLs come from Credly and are treated as
   untrusted: every one is passed through `html.escape()` before it is interpolated into
-  the HTML written to your README.
+  the HTML written to your README or the SVG card. `accent` must be a hex color before
+  it reaches the SVG.
 
 ## Development
 
-No install step -- the script is standard library only. Tests and lint use `uv`:
+No install step for README mode -- the script is standard library only. Tests and lint
+use `uv`:
 
 ```bash
 # Run the tests
@@ -294,7 +379,8 @@ uv run --with ruff ruff check .
 
 On every push to `main` and every pull request, CI runs `ruff check` on Python 3.13,
 `pytest` on 3.12, 3.13 and 3.14, and a third job that runs `action.yml` itself from the
-checkout and fails if any of the five outputs comes back empty. Both tool versions are
+checkout and fails if any of the five outputs comes back empty, then runs it again with
+`output: svg` and fails unless the card parses as XML. Both tool versions are
 pinned in `.github/workflows/ci.yml`, and `ruff check` there runs on the full default
 ruleset with no repo config.
 
@@ -306,6 +392,16 @@ printf '<!-- CREDLY-BADGES:START -->\n<!-- CREDLY-BADGES:END -->\n' > /tmp/scrat
 CREDLY_USERNAME=your-username README_PATH=/tmp/scratch.md python update-credly-badges.py
 cat /tmp/scratch.md
 ```
+
+To render the SVG card the way the action does, add Pillow:
+
+```bash
+CREDLY_USERNAME=your-username OUTPUT=svg SVG_PATH=/tmp/card.svg \
+  uv run --no-project --with pillow==12.3.0 python update-credly-badges.py
+```
+
+Without Pillow the card still renders, with every image at full size: about 1.26 MB
+instead of 390 KB for the example card.
 
 ## License
 
