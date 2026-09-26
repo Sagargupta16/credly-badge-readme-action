@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-09-26
+
+### Fixed
+
+- SVG card labels drop the word "Badge". It said nothing under a badge and could push the real name past the label's last line: "Claude Partner Badge - Claude Code" showed as "CLAUDE PARTNER / BADGE CLAUDE" and now shows "CLAUDE PARTNER / CLAUDE CODE". README mode is unchanged.
+
 ## [1.1.0] - 2026-09-25
 
 The first release since `1.0.0`, so besides SVG card mode it ships every fix made after

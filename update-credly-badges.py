@@ -313,7 +313,10 @@ def short_badge(title: str) -> str:
     """Drop the issuer prefixes and suffixes that crowd a badge's label."""
     for prefix in ISSUER_PREFIXES:
         title = title.replace(prefix, "")
-    return title.replace(" - Training Badge", "").replace(" - ", " ")
+    title = title.replace(" - Training Badge", "").replace(" - ", " ")
+    # the word "Badge" says nothing under a badge and can push the real name past
+    # the label's last line ("Claude Partner Badge - Claude Code" lost "Code")
+    return " ".join(word for word in title.split() if word != "Badge")
 
 
 def glyph(font: float) -> float:
