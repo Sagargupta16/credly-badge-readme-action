@@ -339,6 +339,19 @@ def test_render_svg_shrinks_a_long_word_to_its_column(fetched):
     assert float(label.get("font-size")) < 8.5
 
 
+def test_short_badge_drops_the_word_badge():
+    assert mod.short_badge("Claude Partner Badge - Claude Code") == (
+        "Claude Partner Claude Code"
+    )
+
+
+def test_short_badge_keeps_issuer_and_training_rules():
+    assert mod.short_badge("AWS Certified Developer - Associate") == (
+        "Developer Associate"
+    )
+    assert mod.short_badge("AWS Cloud Quest - Training Badge") == "AWS Cloud Quest"
+
+
 def test_render_svg_draws_plain_dashes(fetched):
     title = f"AWS Certified Developer {EN_DASH} Associate {EM_DASH} 2026"
 
