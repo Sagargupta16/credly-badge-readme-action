@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0] - 2026-10-11
+
+### Changed
+
+- The SVG card inlines its badge images as WebP (quality 85, method 6, alpha channel lossless) instead of optimized PNG. Images are still shrunk to twice their drawn size, so they stay sharp on high-density screens and transparent corners stay transparent. The 22-badge example card drops from 390,601 bytes to 124,291, under a third of its size. No new dependency: the pinned `pillow==12.3.0` wheel the action already installs writes WebP. README mode is unchanged.
+- The same badges still give the same bytes on every run, so `git diff` stays an exact change check. Expect one card commit on the first run after upgrading, since every image is re-encoded.
+- Fallbacks are kept: a Pillow built without WebP support inlines the optimized PNG as before, and without Pillow the original image is inlined unchanged.
+- `examples/credly-badges.svg` re-rendered with WebP images, which also brings in the 1.1.1 label fix.
+- CI's SVG-mode run of the action fails unless every badge image in the card is WebP.
+
+### Added
+
+- Tests for the WebP image path (format, size, transparency, same bytes twice) and both PNG fallbacks. The ones that need Pillow skip where it is not installed.
+
 ## [1.1.1] - 2026-09-26
 
 ### Fixed

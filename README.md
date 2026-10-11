@@ -169,9 +169,11 @@ the same bytes on every run, so `git diff` is an exact change check.
 - **Color**: `accent` sets the group label color. Quote it (`accent: "#f59e0b"`),
   since an unquoted `#` starts a YAML comment.
 - **Size**: when `output` is not `readme`, the action installs one pinned wheel,
-  `pillow==12.3.0`, and shrinks each image to twice its drawn size, sharp on
-  high-density screens. The example above holds 22 badges in about 390 KB. README mode
-  installs nothing.
+  `pillow==12.3.0`, shrinks each image to twice its drawn size, sharp on high-density
+  screens, and inlines it as WebP (quality 85, transparency kept exactly). The example
+  above holds 22 badges in about 124 KB, against 391 KB with the PNG images that
+  `v1.1.x` inlined. Every current browser draws WebP inside an SVG shown through
+  `<img>`, which is how GitHub shows it. README mode installs nothing.
 
 A workflow that renders the card weekly and commits it only when git sees a change:
 
@@ -380,7 +382,8 @@ uv run --with ruff ruff check .
 On every push to `main` and every pull request, CI runs `ruff check` on Python 3.13,
 `pytest` on 3.12, 3.13 and 3.14, and a third job that runs `action.yml` itself from the
 checkout and fails if any of the five outputs comes back empty, then runs it again with
-`output: svg` and fails unless the card parses as XML. Both tool versions are
+`output: svg` and fails unless the card parses as XML with every badge image inlined
+as WebP. Both tool versions are
 pinned in `.github/workflows/ci.yml`, and `ruff check` there runs on the full default
 ruleset with no repo config.
 
@@ -400,8 +403,12 @@ CREDLY_USERNAME=your-username OUTPUT=svg SVG_PATH=/tmp/card.svg \
   uv run --no-project --with pillow==12.3.0 python update-credly-badges.py
 ```
 
-Without Pillow the card still renders, with every image at full size: about 1.26 MB
-instead of 390 KB for the example card.
+Without Pillow the card still renders, with every image inlined as the full-size PNG
+Credly serves: about 1.26 MB instead of 124 KB for the example card. A Pillow built
+without WebP support inlines optimized PNGs instead (about 391 KB).
+
+The tests that need Pillow are skipped without it; run them with
+`uv run --with pytest --with pillow==12.3.0 python -m pytest -v`.
 
 ## License
 
