@@ -343,13 +343,12 @@ accepted badges.
 Pin to a full commit SHA and record the human-readable version in a trailing comment:
 
 ```yaml
-- uses: Sagargupta16/credly-badge-readme-action@53428cd4bf0496ade08bbc52632b6f540b029af0 # v1.0.0
+- uses: Sagargupta16/credly-badge-readme-action@558f61895d960b06c29c856d34c22cd47fb2e1be # v1.2.0
 ```
 
-`@v1` is a moving major tag, so it changes under you; a SHA does not. Today they are the
-same code either way: `v1` and `v1.0.0` both dereference to `53428cd` (2026-03-04), which
-predates the outputs fix, so all five outputs are empty strings on both. Re-pin once a
-newer release is tagged.
+`@v1` is a moving major tag: it follows the latest 1.x release, so it changes under you;
+a SHA does not. Each release's commit SHA is on the
+[releases page](https://github.com/Sagargupta16/credly-badge-readme-action/releases).
 
 Security:
 

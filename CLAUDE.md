@@ -66,8 +66,8 @@ For an end-to-end check by hand, run the script standalone against a scratch REA
 
 - Adding an input means touching three places in sync: `action.yml` inputs, `action.yml` env block, and the env read in the script.
 - `v1` is a moving major tag. After cutting a new `v1.x.y`, retag: `git tag -f v1 && git push -f origin v1`, and update `CHANGELOG.md`.
-- This retag has never actually been run. As of 2026-09-06 both `v1` and `v1.0.0` still dereference to the initial commit `53428cd` (2026-03-04), so consumers on `@v1` get Python 3.11, no `html.escape()`, and empty action outputs. Every fix since then is unreleased -- see `CHANGELOG.md` under Unreleased.
-- Moving the `v1` tag does not reach the one known consumer. `Sagargupta16/Sagargupta16/.github/workflows/update-credly-badges.yml` pins `@53428cd4bf0496ade08bbc52632b6f540b029af0 # v1`, so a release means three steps: tag `v1.x.y`, move `v1`, then re-pin that workflow to the new SHA. Confirmed broken there on 2026-09-06: run 33414078659 (2026-08-31) logged "README updated with latest Credly badges." and "Changes detected:", while its commit step, gated on `steps.credly.outputs.changed == 'true'`, was skipped.
+- Every release since v1.1.0 has moved `v1` (v1.2.0 on 2026-10-11, commit `558f618`); `git ls-remote --tags origin 'v1^{}'` shows where it points now.
+- Moving the `v1` tag does not reach the one known consumer. `Sagargupta16/Sagargupta16/.github/workflows/update-credly-badges.yml` pins a full commit SHA with a `# vX.Y.Z` comment, so a release means three steps: tag `v1.x.y` on the merge commit, move `v1`, then re-pin that workflow to the new SHA.
 - Composite action outputs need an explicit `value:` mapping plus an `id:` on the step that writes `$GITHUB_OUTPUT`. Declaring only a `description` makes every output silently resolve to an empty string.
 - Badge names/URLs from the Credly API are `html.escape()`d before interpolation -- untrusted data, keep it.
 - `update_readme` uses `re.subn` with a lambda replacement so backslashes in badge content are literal, not backreferences. Don't "simplify" it away.
