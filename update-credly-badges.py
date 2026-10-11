@@ -344,18 +344,23 @@ def label_font(line: str, font: float, col: float) -> float:
 
 
 def downscale(raw: bytes, px: int) -> bytes:
-    """Return the image shrunk to px square as an optimized PNG, or unchanged without Pillow."""
+    """Return the image shrunk to px square as WebP or PNG, or unchanged without Pillow."""
     try:
         # optional: action.yml installs it unless output is readme
-        from PIL import Image
+        from PIL import Image, features
     except ImportError:
         return raw
     with Image.open(io.BytesIO(raw)) as source:
-        # palette images would resize nearest-neighbour, and CMYK cannot be saved as PNG
+        # palette images would resize nearest-neighbour, and CMYK cannot be saved as WebP or PNG
         img = source if source.mode in ("RGB", "RGBA") else source.convert("RGBA")
         img.thumbnail((px, px), Image.Resampling.LANCZOS)
         out = io.BytesIO()
-        img.save(out, format="PNG", optimize=True)
+        if features.check("webp"):
+            # lossy color, lossless alpha: under a third of the optimized PNG's bytes
+            img.save(out, format="WEBP", quality=85, method=6)
+        else:
+            # a Pillow built without libwebp; the action's pinned wheel always has it
+            img.save(out, format="PNG", optimize=True)
     return out.getvalue() if out.tell() < len(raw) else raw
 
 
@@ -365,12 +370,14 @@ def badge_data_uri(url: str, px: int) -> str:
     if not url.startswith(CREDLY_CDN):
         raise ValueError(f"refusing to fetch a badge image outside {CREDLY_CDN}: {url}")
     raw = downscale(fetch_url(url, "image/png,image/jpeg"), px)
-    if raw.startswith(PNG_MAGIC):
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        mime = "image/webp"
+    elif raw.startswith(PNG_MAGIC):
         mime = "image/png"
     elif raw.startswith(JPEG_MAGIC):
         mime = "image/jpeg"
     else:
-        raise ValueError(f"badge image is neither PNG nor JPEG: {url}")
+        raise ValueError(f"badge image is neither WebP, PNG nor JPEG: {url}")
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 

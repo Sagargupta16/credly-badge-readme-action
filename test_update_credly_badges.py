@@ -2,6 +2,8 @@
 
 import base64
 import importlib.util
+import io
+import sys
 import xml.etree.ElementTree as ET
 from itertools import pairwise
 from pathlib import Path
@@ -385,7 +387,7 @@ def test_render_svg_inlines_each_image_once(fetched):
     root = card([("Industry certifications", twins)])
 
     hrefs = [img.get("href") for img in root.iter(f"{SVG}image")]
-    assert all(href.startswith("data:image/png;base64,") for href in hrefs)
+    assert all(href.startswith("data:image/") for href in hrefs)
     assert fetched == ["https://images.credly.com/images/x/y.png"]
 
 
@@ -394,6 +396,69 @@ def test_badge_data_uri_refuses_hosts_outside_the_credly_cdn(fetched):
         mod.badge_data_uri("file:///etc/passwd", 168)
 
     assert fetched == []
+
+
+def test_badge_data_uri_inlines_the_png_unchanged_without_pillow(monkeypatch, fetched):
+    monkeypatch.setitem(sys.modules, "PIL", None)  # import PIL now raises ImportError
+
+    uri = mod.badge_data_uri("https://images.credly.com/images/x/y.png", 168)
+
+    assert uri == f"data:image/png;base64,{base64.b64encode(TINY_PNG).decode()}"
+
+
+@pytest.fixture
+def pil():
+    """Pillow's Image module; the test is skipped where Pillow is not installed."""
+    return pytest.importorskip("PIL.Image")
+
+
+def badge_png(pil):
+    """Return a 600px PNG badge like Credly's: opaque middle, transparent corners."""
+    img = pil.new("RGBA", (600, 600), (0, 0, 0, 0))
+    img.paste((37, 99, 235, 255), (100, 100, 500, 500))
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def test_badge_data_uri_inlines_webp_with_pillow(monkeypatch, pil):
+    monkeypatch.setattr(mod, "fetch_url", lambda url, accept: badge_png(pil))
+
+    uri = mod.badge_data_uri("https://images.credly.com/images/x/y.png", 168)
+
+    assert uri.startswith("data:image/webp;base64,")
+
+
+def test_downscale_shrinks_to_the_size_asked_as_webp(pil):
+    shrunk = mod.downscale(badge_png(pil), 168)
+
+    with pil.open(io.BytesIO(shrunk)) as img:
+        assert (img.format, img.size) == ("WEBP", (168, 168))
+
+
+def test_downscale_keeps_transparent_corners(pil):
+    shrunk = mod.downscale(badge_png(pil), 168)
+
+    with pil.open(io.BytesIO(shrunk)) as img:
+        alpha = img.convert("RGBA").getchannel("A")
+    assert (alpha.getpixel((0, 0)), alpha.getpixel((84, 84))) == (0, 255)
+
+
+def test_downscale_writes_the_same_bytes_every_time(pil):
+    # the scheduled workflow commits on git diff, so a quiet day must change nothing
+    source = badge_png(pil)
+
+    assert mod.downscale(source, 168) == mod.downscale(source, 168)
+
+
+def test_downscale_falls_back_to_png_without_webp_support(monkeypatch, pil):
+    features = pytest.importorskip("PIL.features")
+    monkeypatch.setattr(features, "check", lambda feature: False)
+
+    shrunk = mod.downscale(badge_png(pil), 168)
+
+    with pil.open(io.BytesIO(shrunk)) as img:
+        assert (img.format, img.size) == ("PNG", (168, 168))
 
 
 @pytest.mark.parametrize(
