@@ -447,8 +447,11 @@ def test_downscale_keeps_transparent_corners(pil):
 def test_downscale_writes_the_same_bytes_every_time(pil):
     # the scheduled workflow commits on git diff, so a quiet day must change nothing
     source = badge_png(pil)
+    first = mod.downscale(source, 168)
 
-    assert mod.downscale(source, 168) == mod.downscale(source, 168)
+    second = mod.downscale(source, 168)
+
+    assert second == first
 
 
 def test_downscale_falls_back_to_png_without_webp_support(monkeypatch, pil):
