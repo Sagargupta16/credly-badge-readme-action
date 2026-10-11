@@ -12,13 +12,14 @@ CI (`.github/workflows/ci.yml`) runs three jobs on every push to `main` and ever
 
 - `lint`: `pip install --only-binary :all: ruff==0.16.6`, then `ruff check .` on Python 3.13
 - `test`: `pip install --only-binary :all: pytest==9.1.1`, then `pytest -v` on Python 3.12, 3.13 and 3.14
-- `action`: runs `action.yml` from the checkout against a live Credly profile, fails if any of the five outputs is empty or a step gated on `changed` is skipped, then runs again with `output: svg` and fails unless the card parses as XML
+- `action`: runs `action.yml` from the checkout against a live Credly profile, fails if any of the five outputs is empty or a step gated on `changed` is skipped, then runs again with `output: svg` and fails unless the card parses as XML with every badge image inlined as WebP
 
-Run the first two locally:
+Run the first two locally. The `test` job installs no Pillow, so its five Pillow tests (the WebP image path) skip there; the second pytest line runs them:
 
 ```bash
 uvx ruff@0.16.6 check .
 uv run --no-project --with pytest==9.1.1 pytest -v
+uv run --no-project --with pytest==9.1.1 --with pillow==12.3.0 pytest -v
 ```
 
 The `action` job only runs on GitHub. To exercise the script by hand without touching a real README:

@@ -106,6 +106,16 @@ jobs:
           output: svg
           svg-path: scratch.svg
 
-      - name: Assert the SVG card exists and parses as XML
+      - name: Assert the SVG card parses as XML and inlines WebP badges
         run: |
-          python -c "import xml.etree.ElementTree as ET; n = len(ET.parse('scratch.svg').getroot().findall('.//{http://www.w3.org/2000/svg}image')); assert n, 'scratch.svg has no badge images'; print(f'scratch.svg parses as XML with {n} badge images')"
+          python - <<'EOF'
+          import os
+          import xml.etree.ElementTree as ET
+
+          images = ET.parse("scratch.svg").getroot().iter("{http://www.w3.org/2000/svg}image")
+          hrefs = [image.get("href") for image in images]
+          assert hrefs, "scratch.svg has no badge images"
+          # the pinned Pillow wheel always has libwebp, so a PNG here means the WebP path broke
+          assert all(h.startswith("data:image/webp;base64,") for h in hrefs), "a badge image is not WebP"
+          print(f"scratch.svg parses as XML with {len(hrefs)} WebP badge images, {os.path.getsize('scratch.svg')} bytes")
+          EOF
