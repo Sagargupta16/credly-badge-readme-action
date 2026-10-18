@@ -160,7 +160,7 @@ def selection_settings() -> tuple[bool, str, int]:
         fail(f"hide-expired must be true or false, got '{HIDE_EXPIRED}'.")
     if SORT not in SORTS:
         fail(f"sort must be credly, newest or oldest, got '{SORT}'.")
-    if not re.fullmatch(r"[0-9]+", MAX_BADGES):
+    if not re.fullmatch(r"\d+", MAX_BADGES, re.ASCII):
         fail(
             f"max-badges must be a whole number, 0 for every badge, got '{MAX_BADGES}'."
         )
@@ -649,6 +649,33 @@ def commit_and_push(paths: list[str], message: str) -> bool:
     return True
 
 
+def commit_settings() -> None:
+    """Validate the commit inputs."""
+    if COMMIT not in ("true", "false"):
+        fail(f"commit must be true or false, got '{COMMIT}'.")
+    if COMMIT == "true" and not COMMIT_MESSAGE.strip():
+        fail("commit-message must not be empty.")
+
+
+def build_cards(
+    certs: list, prof: list, know: list, svg: tuple[list[int], str] | None
+) -> list[tuple[str, str]]:
+    """Return (path, SVG) for the card and, when svg-mobile-path is set, the phone card.
+
+    Both cards share one image cache, so the phone card downloads nothing extra.
+    """
+    if svg is None:
+        return []
+    per_row, accent = svg
+    groups = svg_groups(certs, prof, know, SVG_GROUPS)
+    images = {}
+    cards = [(SVG_PATH, render_svg(groups, per_row, accent, DESKTOP, images))]
+    if SVG_MOBILE_PATH:
+        mobile = render_svg(groups, MOBILE_PER_ROW, accent, MOBILE, images)
+        cards.append((SVG_MOBILE_PATH, mobile))
+    return cards
+
+
 def main():
     if not CREDLY_USERNAME:
         print("ERROR: CREDLY_USERNAME is required.")
@@ -658,12 +685,8 @@ def main():
         fail(f"output must be readme, svg or both, got '{OUTPUT}'.")
     # every input is checked before any network call, so a typo fails fast
     hide_expired, sort, limit = selection_settings()
-    if COMMIT not in ("true", "false"):
-        fail(f"commit must be true or false, got '{COMMIT}'.")
-    if COMMIT == "true" and not COMMIT_MESSAGE.strip():
-        fail("commit-message must not be empty.")
-    if OUTPUT != "readme":
-        per_row, accent = svg_settings()
+    commit_settings()
+    svg = svg_settings() if OUTPUT != "readme" else None
 
     print(f"Fetching badges for Credly user: {CREDLY_USERNAME}")
     data = fetch_badges(CREDLY_USERNAME)
@@ -690,14 +713,7 @@ def main():
 
     # The cards are built before anything is written, so a failed image fetch
     # leaves the README and the SVGs exactly as they were.
-    cards = []
-    if OUTPUT != "readme":
-        groups = svg_groups(certs, prof, know, SVG_GROUPS)
-        images = {}
-        cards.append((SVG_PATH, render_svg(groups, per_row, accent, DESKTOP, images)))
-        if SVG_MOBILE_PATH:
-            mobile = render_svg(groups, MOBILE_PER_ROW, accent, MOBILE, images)
-            cards.append((SVG_MOBILE_PATH, mobile))
+    cards = build_cards(certs, prof, know, svg)
 
     changed = False
     written = []
