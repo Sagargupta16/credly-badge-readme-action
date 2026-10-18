@@ -47,7 +47,7 @@ inputs:
     required: false
     default: "6,8"
   svg-mobile-path:
-    description: "Also write a 400px-wide phone card here when output is svg or both, for a <picture> source; empty draws none"
+    description: "Also write a 340px-wide phone card here when output is svg or both, for a <picture> source; empty draws none"
     required: false
     default: ""
   accent:

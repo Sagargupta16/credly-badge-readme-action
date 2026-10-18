@@ -239,7 +239,7 @@ Then show the card in your README, linked to your Credly profile:
 
 GitHub draws a README 309px wide on a 375px phone, so the 840px card shrinks to 37% and
 its badge labels to 3.1px. Set `svg-mobile-path` and the action also writes a 340px
-card: three certifications and four other badges a row, labels of up to four lines,
+card: three certifications and four other badges a row, labels of up to three and four lines,
 drawn at 91% on that phone with 10px labels. Both cards use the same images at the same
 sizes, so the second card downloads nothing extra; the example phone card is 126,085
 bytes. Available from `v1.3.0`.
