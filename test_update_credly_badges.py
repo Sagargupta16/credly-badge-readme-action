@@ -4,9 +4,11 @@ import base64
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import urllib.error
 import xml.etree.ElementTree as ET
+from datetime import date
 from itertools import pairwise
 from pathlib import Path
 
@@ -157,6 +159,96 @@ def test_fetch_badges_stops_at_a_wrong_username_without_retrying(monkeypatch, ca
 
     assert calls == ["https://www.credly.com/users/no-such-user/badges.json"]
     assert "Credly user 'no-such-user' not found (404)" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- choosing badges
+
+TODAY = date(2026, 10, 18)
+
+
+def dated(name, issued=None, expires=None):
+    badge = make_badge(name, badge_id=name)
+    badge["issued_at_date"] = issued
+    badge["expires_at_date"] = expires
+    return badge
+
+
+def names(badges):
+    return [b["badge_template"]["name"] for b in badges]
+
+
+def test_select_badges_defaults_keep_every_badge_in_profile_order():
+    profile = [dated("B", "2024-01-01", "2020-01-01"), dated("A", "2026-01-01")]
+
+    assert mod.select_badges(profile, False, "credly", 0, TODAY) == profile
+
+
+def test_select_badges_hides_only_badges_past_their_expiry_day():
+    profile = [
+        dated("expired", expires="2026-10-17"),
+        dated("last day", expires="2026-10-18"),
+        dated("no expiry"),
+        dated("bad date", expires="soon"),
+    ]
+
+    shown = mod.select_badges(profile, True, "credly", 0, TODAY)
+
+    assert names(shown) == ["last day", "no expiry", "bad date"]
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected"),
+    [
+        ("newest", ["2026", "2025 first", "2025 second", "undated"]),
+        ("oldest", ["2025 first", "2025 second", "2026", "undated"]),
+    ],
+)
+def test_select_badges_sorts_by_issue_date_with_undated_last(sort, expected):
+    profile = [
+        dated("undated"),
+        dated("2025 first", "2025-05-05"),
+        dated("2026", "2026-01-01"),
+        dated("2025 second", "2025-05-05"),
+    ]
+
+    assert names(mod.select_badges(profile, False, sort, 0, TODAY)) == expected
+
+
+def test_select_badges_limits_after_hiding_and_sorting():
+    profile = [
+        dated("old", "2020-01-01"),
+        dated("expired", "2026-02-01", "2026-03-01"),
+        dated("new", "2026-01-01"),
+        dated("mid", "2024-01-01"),
+    ]
+
+    shown = mod.select_badges(profile, True, "newest", 2, TODAY)
+
+    assert names(shown) == ["new", "mid"]
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("HIDE_EXPIRED", "yes"),
+        ("SORT", "name"),
+        ("MAX_BADGES", "-1"),
+        ("MAX_BADGES", "ten"),
+    ],
+)
+def test_selection_settings_rejects_bad_values(monkeypatch, setting, value):
+    monkeypatch.setattr(mod, setting, value)
+
+    with pytest.raises(SystemExit):
+        mod.selection_settings()
+
+
+def test_selection_settings_reads_the_inputs(monkeypatch):
+    monkeypatch.setattr(mod, "HIDE_EXPIRED", "true")
+    monkeypatch.setattr(mod, "SORT", "oldest")
+    monkeypatch.setattr(mod, "MAX_BADGES", "12")
+
+    assert mod.selection_settings() == (True, "oldest", 12)
 
 
 # ---------------------------------------------------------------- README mode is frozen
@@ -507,6 +599,39 @@ def test_downscale_falls_back_to_png_without_webp_support(monkeypatch, pil):
         assert (img.format, img.size) == ("PNG", (168, 168))
 
 
+def test_render_svg_mobile_layout_is_340px_wide_with_three_and_four_per_row(fetched):
+    groups = mod.svg_groups(badges("c", 4), badges("p", 5), [], "two")
+
+    root = ET.fromstring(
+        mod.render_svg(groups, mod.MOBILE_PER_ROW, "#60a5fa", mod.MOBILE)
+    )
+
+    assert (root.get("width"), root.get("viewBox").split()[2]) == ("340", "340")
+    assert [len(row) for row in rows(root)] == [3, 1, 4, 1]
+    # labels are drawn larger than the 840px card's 8.5px
+    assert float(badge_labels(root)[0].get("font-size")) == 11
+
+
+def test_render_svg_cards_share_images_drawn_at_the_same_size(fetched):
+    groups = mod.svg_groups(badges("c", 2), badges("p", 2), [], "two")
+    images = {}
+
+    mod.render_svg(groups, [6, 8], "#fff", mod.DESKTOP, images)
+    mod.render_svg(groups, mod.MOBILE_PER_ROW, "#fff", mod.MOBILE, images)
+
+    # the phone card draws the default desktop sizes, so nothing is fetched twice
+    assert len(fetched) == 4
+
+
+def test_svg_settings_rejects_a_mobile_path_equal_to_svg_path(monkeypatch):
+    monkeypatch.setattr(mod, "SVG_GROUPS", "two")
+    monkeypatch.setattr(mod, "SVG_PATH", "assets/card.svg")
+    monkeypatch.setattr(mod, "SVG_MOBILE_PATH", "assets/./card.svg")
+
+    with pytest.raises(SystemExit):
+        mod.svg_settings()
+
+
 @pytest.mark.parametrize(
     ("setting", "value"),
     [
@@ -552,6 +677,11 @@ def stub_profile(tmp_path, monkeypatch, output):
         "SVG_GROUPS": "two",
         "SVG_PER_ROW": "6,8",
         "ACCENT": "#60a5fa",
+        "SVG_MOBILE_PATH": "",
+        "HIDE_EXPIRED": "false",
+        "SORT": "credly",
+        "MAX_BADGES": "0",
+        "COMMIT": "false",
         "GITHUB_OUTPUT": str(outputs),
     }
     for name, value in settings.items():
@@ -604,3 +734,141 @@ def test_main_rejects_an_unknown_output_before_fetching(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit):
         mod.main()
+
+
+def test_main_writes_the_phone_card_next_to_the_desktop_card(
+    tmp_path, monkeypatch, fetched
+):
+    _, svg, outputs = stub_profile(tmp_path, monkeypatch, "svg")
+    mobile = tmp_path / "assets" / "credly-badges-mobile.svg"
+    monkeypatch.setattr(mod, "SVG_MOBILE_PATH", str(mobile))
+
+    mod.main()
+
+    assert ET.parse(svg).getroot().get("width") == "840"
+    assert ET.parse(mobile).getroot().get("width") == "340"
+    # the fetches the 840px card makes on its own (two URLs, one of them at two
+    # sizes); the phone card draws the same sizes and adds none
+    assert len(fetched) == 3
+    assert outputs.read_text(encoding="utf-8").endswith("changed=true\n")
+
+
+def test_main_readme_mode_ignores_the_phone_card(tmp_path, monkeypatch, fetched):
+    stub_profile(tmp_path, monkeypatch, "readme")
+    mobile = tmp_path / "credly-badges-mobile.svg"
+    monkeypatch.setattr(mod, "SVG_MOBILE_PATH", str(mobile))
+
+    mod.main()
+
+    assert not mobile.exists()
+    assert fetched == []
+
+
+def test_main_counts_only_the_badges_shown(tmp_path, monkeypatch, fetched):
+    _, _, outputs = stub_profile(tmp_path, monkeypatch, "readme")
+    monkeypatch.setattr(mod, "MAX_BADGES", "3")
+
+    mod.main()
+
+    assert outputs.read_text(encoding="utf-8").startswith(
+        "total-badges=3\ncertifications-count=2\nprofessional-count=1\n"
+        "knowledge-count=0\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [("COMMIT", "yes"), ("SORT", "random"), ("MAX_BADGES", "1.5")],
+)
+def test_main_rejects_bad_inputs_before_fetching(tmp_path, monkeypatch, setting, value):
+    stub_profile(tmp_path, monkeypatch, "readme")
+    monkeypatch.setattr(mod, setting, value)
+    monkeypatch.setattr(mod, "fetch_badges", lambda username: pytest.fail("fetched"))
+
+    with pytest.raises(SystemExit):
+        mod.main()
+
+
+# ---------------------------------------------------------------- commit: true
+
+
+def run_git(cwd, *args):
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout
+
+
+@pytest.fixture
+def clone(tmp_path, monkeypatch):
+    """A clone of a local bare remote, holding a README with the markers."""
+    remote, seed, work = tmp_path / "remote.git", tmp_path / "seed", tmp_path / "work"
+    run_git(tmp_path, "init", "--quiet", "--bare", str(remote))
+    run_git(tmp_path, "init", "--quiet", str(seed))
+    (seed / "README.md").write_text(MARKERS, encoding="utf-8")
+    run_git(seed, "add", "README.md")
+    run_git(seed, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    run_git(seed, "push", "--quiet", str(remote), "HEAD")
+    run_git(tmp_path, "clone", "--quiet", str(remote), str(work))
+    monkeypatch.chdir(work)
+    return remote, work
+
+
+def remote_log(remote):
+    return run_git(remote, "log", "--format=%an <%ae>|%s", "--name-only")
+
+
+def remote_head(remote):
+    """Return the newest commit's author|subject line, then the files it touched."""
+    out = run_git(remote, "log", "-1", "--format=%an <%ae>|%s", "--name-only")
+    return [line for line in out.splitlines() if line]
+
+
+def test_main_commits_and_pushes_only_the_written_files(clone, monkeypatch, fetched):
+    remote, work = clone
+    stub_profile(work, monkeypatch, "both")
+    for name, value in {
+        "README_PATH": "README.md",
+        "SVG_PATH": "assets/credly-badges.svg",
+        "SVG_MOBILE_PATH": "assets/credly-badges-mobile.svg",
+        "GITHUB_OUTPUT": "",
+        "COMMIT": "true",
+        "COMMIT_MESSAGE": "chore: sync badges",
+    }.items():
+        monkeypatch.setattr(mod, name, value)
+    (work / "unrelated.txt").write_text("not mine", encoding="utf-8")
+
+    mod.main()
+
+    head = remote_head(remote)
+    assert head[0] == f"{mod.BOT_NAME} <{mod.BOT_EMAIL}>|chore: sync badges"
+    assert sorted(head[1:]) == [
+        "README.md",
+        "assets/credly-badges-mobile.svg",
+        "assets/credly-badges.svg",
+    ]
+    assert "unrelated.txt" not in remote_log(remote)
+
+
+def test_main_does_not_commit_when_nothing_changed(clone, monkeypatch, fetched):
+    remote, work = clone
+    stub_profile(work, monkeypatch, "readme")
+    monkeypatch.setattr(mod, "README_PATH", "README.md")
+    monkeypatch.setattr(mod, "GITHUB_OUTPUT", "")
+    monkeypatch.setattr(mod, "COMMIT", "true")
+    mod.main()
+    before = remote_log(remote)
+
+    mod.main()
+
+    assert remote_log(remote) == before
+
+
+def test_commit_and_push_reports_a_push_it_cannot_make(clone, capsys):
+    remote, work = clone
+    (work / "README.md").write_text("changed", encoding="utf-8")
+    run_git(work, "remote", "set-url", "origin", str(remote.parent / "missing.git"))
+
+    with pytest.raises(SystemExit):
+        mod.commit_and_push(["README.md"], "chore: update Credly badges")
+
+    assert "git push failed" in capsys.readouterr().out

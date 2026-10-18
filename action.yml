@@ -46,14 +46,38 @@ inputs:
     description: "Comma-separated badges per row for each SVG group, 1 to 12; the last value repeats for later groups"
     required: false
     default: "6,8"
+  svg-mobile-path:
+    description: "Also write a 340px-wide phone card here when output is svg or both, for a <picture> source; empty draws none"
+    required: false
+    default: ""
   accent:
     description: "Hex color of the SVG card's group labels"
     required: false
     default: "#60a5fa"
+  hide-expired:
+    description: "Leave out badges whose expires_at_date has passed (true/false)"
+    required: false
+    default: "false"
+  sort:
+    description: "Badge order: credly (your profile order), newest or oldest (by issue date)"
+    required: false
+    default: "credly"
+  max-badges:
+    description: "Show at most this many badges, after hide-expired and sort; 0 shows every badge"
+    required: false
+    default: "0"
+  commit:
+    description: "Commit and push the written files when they changed, as github-actions[bot] (true/false); needs permissions: contents: write"
+    required: false
+    default: "false"
+  commit-message:
+    description: "Commit message used when commit is true"
+    required: false
+    default: "chore: update Credly badges"
 
 outputs:
   total-badges:
-    description: "Total number of badges found"
+    description: "Number of badges written, after hide-expired and max-badges"
     value: ${{ steps.run-updater.outputs.total-badges }}
   certifications-count:
     description: "Number of industry certifications"
@@ -65,7 +89,7 @@ outputs:
     description: "Number of knowledge/learning badges"
     value: ${{ steps.run-updater.outputs.knowledge-count }}
   changed:
-    description: "Whether the README or the SVG card was updated (true/false)"
+    description: "Whether the README or an SVG card was updated (true/false)"
     value: ${{ steps.run-updater.outputs.changed }}
 
 runs:
@@ -99,5 +123,11 @@ runs:
         SVG_PATH: ${{ inputs.svg-path }}
         SVG_GROUPS: ${{ inputs.svg-groups }}
         SVG_PER_ROW: ${{ inputs.svg-per-row }}
+        SVG_MOBILE_PATH: ${{ inputs.svg-mobile-path }}
         ACCENT: ${{ inputs.accent }}
+        HIDE_EXPIRED: ${{ inputs.hide-expired }}
+        SORT: ${{ inputs.sort }}
+        MAX_BADGES: ${{ inputs.max-badges }}
+        COMMIT: ${{ inputs.commit }}
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
       run: python "${{ github.action_path }}/update-credly-badges.py"

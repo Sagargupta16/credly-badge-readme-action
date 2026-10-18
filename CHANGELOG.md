@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0] - 2026-10-18
+
+### Added
+
+- `svg-mobile-path`: with `output: svg` or `both`, also write a 340px phone card for a `<picture>` source. GitHub draws a README 309px wide on a 375px phone, which shrinks the 840px card to 37% and its badge labels to 3.1px; the phone card is drawn at 91% there, with 10px labels (measured 2026-10-18 by `scripts/phone-preview.py`). It lays certifications out three a row and other badges four a row, with labels of up to three and four lines, and draws badges at the 840px card's default sizes, so both cards share every downloaded image. Empty by default, so nothing changes unless it is set.
+- `hide-expired`, `sort` and `max-badges` choose the badges, in README mode and both cards alike: drop badges past their `expires_at_date`, order by `issued_at_date` (`newest` or `oldest`; the default `credly` keeps the profile order) and keep the first N. With the defaults the README section and the card are byte-identical to 1.2.1.
+- `commit` and `commit-message`: `commit: true` commits only the files the action wrote, as `github-actions[bot]`, when one of them changed, and pushes. Off by default.
+- `examples/credly-badges-mobile.svg`, the phone card of the same 22-badge profile (126,085 bytes), and `docs/phone-preview.webp`, both cards at a phone's README width.
+- `scripts/phone-preview.py` measures GitHub's README width on a 375px phone and redraws the preview.
+- CI's SVG-mode run also writes the phone card and fails unless it is 340px wide with every image WebP.
+- Tests for badge selection, the phone layout, image sharing between the two cards, input validation and `commit: true` against a local bare remote.
+- README: the card at the top (the phone card on phones), a CI badge, a comparison with pemtajo/badge-readme and credly-readme-stats, and sections for the phone card, choosing badges and letting the action commit.
+
+### Changed
+
+- `total-badges` counts the badges written, after `hide-expired` and `max-badges`. Without those inputs it is the same number as before.
+
 ## [1.2.1] - 2026-10-18
 
 ### Fixed

@@ -34,7 +34,7 @@ Do not commit `scratch.md` or `card.svg`.
 
 ## Conventions
 
-- Tests live in `test_update_credly_badges.py` at the repo root and stub every network fetch. Add tests there for any new behavior.
+- Tests live in `test_update_credly_badges.py` at the repo root and stub every network fetch. The `commit: true` tests need `git` on `PATH`; they push to a bare remote in a temporary folder. Add tests there for any new behavior.
 - `FROZEN_SECTION` in the tests pins README mode's output byte for byte. If that test fails, README mode changed for every consumer.
 - A new input touches three places in sync: `inputs` in `action.yml`, the `env` block of the `run-updater` step, and the `os.environ` read in `update-credly-badges.py`. Add it to the README Inputs table too.
 - Keep README mode standard library only. Pillow is the one third-party import, inside `downscale()` behind `except ImportError`, and `action.yml` installs it only when `output` is not `readme`.

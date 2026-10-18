@@ -1,6 +1,7 @@
 # Credly Badge README Updater
 
 [![Marketplace](https://img.shields.io/badge/marketplace-credly--badge--readme--updater-2088FF?style=flat-square&logo=github)](https://github.com/marketplace/actions/credly-badge-readme-updater)
+[![CI](https://img.shields.io/github/actions/workflow/status/Sagargupta16/credly-badge-readme-action/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Sagargupta16/credly-badge-readme-action/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action)
 [![Forks](https://img.shields.io/github/forks/Sagargupta16/credly-badge-readme-action?style=flat-square)](https://github.com/Sagargupta16/credly-badge-readme-action)
 [![License](https://img.shields.io/github/license/Sagargupta16/credly-badge-readme-action?style=flat-square)](LICENSE)
@@ -10,6 +11,11 @@
 
 No more manually updating badge images when you earn a new certification. This Action fetches your badges from Credly's public API and updates your README automatically.
 
+<a href="#svg-card-mode"><picture><source media="(max-width: 600px)" srcset="examples/credly-badges-mobile.svg"><img src="examples/credly-badges.svg" width="100%" alt="Every Credly badge of one profile drawn as an animated SVG card, rendered by this action"></picture></a>
+
+That card is this action's `output: svg`, drawn from a live profile of 22 badges. Open
+this page on a phone and you get the narrower `svg-mobile-path` card instead.
+
 ---
 
 ## Features
@@ -17,7 +23,12 @@ No more manually updating badge images when you earn a new certification. This A
 - Fetches all badges from your Credly profile automatically
 - Categorizes badges into **Industry Certifications**, **Professional/Partner**, and **Knowledge/Learning**
 - Updates your README between markers (non-destructive -- only touches the badge section)
-- Optional [SVG card mode](#svg-card-mode): every badge in one self-hosted, animated SVG
+- Optional [SVG card mode](#svg-card-mode): every badge in one self-hosted, animated SVG,
+  plus an optional [phone card](#phone-card) that stays readable on a 375px screen
+- [Choose the badges](#choose-which-badges-show): hide expired ones, sort newest or oldest
+  first, cap the count
+- Optional [commit and push](#let-the-action-commit) from inside the action, so the
+  workflow is one step
 - Configurable badge size, retry logic, and categorization keywords
 - Outputs badge counts for use in downstream workflow steps
 
@@ -94,17 +105,26 @@ That's it. Your badges will auto-update every Monday.
 | `svg-path` | No | `assets/credly-badges.svg` | Where the SVG card is written; missing folders are created |
 | `svg-groups` | No | `two` | SVG grouping: `two` (certifications, then every other badge) or `three` (the README's categories) |
 | `svg-per-row` | No | `6,8` | Badges per row for each SVG group, 1 to 12; the last value repeats for later groups |
+| `svg-mobile-path` | No | empty | Also write the 340px [phone card](#phone-card) here (`svg` or `both`); empty draws none |
 | `accent` | No | `#60a5fa` | Hex color of the SVG group labels; quote it, an unquoted `#` starts a YAML comment |
+| `hide-expired` | No | `false` | `true` leaves out badges whose Credly expiry date has passed |
+| `sort` | No | `credly` | `credly` keeps your profile order; `newest` or `oldest` sorts by issue date |
+| `max-badges` | No | `0` | Show at most this many badges, counted after `hide-expired` and `sort`; `0` shows all |
+| `commit` | No | `false` | `true` commits and pushes the written files when they changed, as `github-actions[bot]` |
+| `commit-message` | No | `chore: update Credly badges` | Message for the commit `commit: true` makes |
+
+`svg-mobile-path`, `hide-expired`, `sort`, `max-badges`, `commit` and `commit-message`
+are new in `v1.3.0`.
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `total-badges` | Total number of badges found |
+| `total-badges` | Number of badges written, after `hide-expired` and `max-badges` |
 | `certifications-count` | Number of industry certifications |
 | `professional-count` | Number of professional/partner badges |
 | `knowledge-count` | Number of knowledge/learning badges |
-| `changed` | Whether the README or the SVG card was updated (`true`/`false`) |
+| `changed` | Whether the README or an SVG card was updated (`true`/`false`) |
 
 > **Note:** `v1.0.0` only: these five outputs resolve to an empty string there. Fixed in
 > `v1.1.0`; `@v1` and every later tag set them. See [Pinning and security](#pinning-and-security).
@@ -147,9 +167,7 @@ A category with no matching badges is skipped entirely, heading included.
 
 Set `output: svg` and the action draws every badge into one self-hosted, animated SVG
 card instead of editing a README section; `output: both` does both. Available from
-`v1.1.0`.
-
-![Every Credly badge drawn as one animated SVG card](examples/credly-badges.svg)
+`v1.1.0`. The card at the [top of this page](#credly-badge-readme-updater) is one.
 
 The card is a single file that loads nothing else. GitHub serves README images through
 an `<img>`, which cannot fetch external resources, so the action downloads each badge
@@ -217,6 +235,40 @@ Then show the card in your README, linked to your Credly profile:
 [![My Credly badges](assets/credly-badges.svg)](https://www.credly.com/users/your-credly-username)
 ```
 
+### Phone card
+
+GitHub draws a README 309px wide on a 375px phone, so the 840px card shrinks to 37% and
+its badge labels to 3.1px. Set `svg-mobile-path` and the action also writes a 340px
+card: three certifications and four other badges a row, labels of up to three and four lines,
+drawn at 91% on that phone with 10px labels. Both cards use the same images at the same
+sizes, so the second card downloads nothing extra; the example phone card is 126,085
+bytes. Available from `v1.3.0`.
+
+![The 840px card and the phone card, each drawn 309px wide as on a 375px phone](docs/phone-preview.webp)
+
+Those numbers come from [`scripts/phone-preview.py`](scripts/phone-preview.py), which
+opens this repo on github.com at a 375px viewport, measures the README width, and draws
+both example cards at it (run 2026-10-18).
+
+Add the path to the step above and to its `git add`:
+
+```yaml
+        with:
+          credly-username: "your-credly-username"
+          output: svg
+          svg-mobile-path: assets/credly-badges-mobile.svg
+```
+
+Then let the browser pick the card by screen width. GitHub keeps `<picture>` and its
+`media` query, so a phone loads only the phone card:
+
+```html
+<a href="https://www.credly.com/users/your-credly-username"><picture>
+  <source media="(max-width: 600px)" srcset="assets/credly-badges-mobile.svg">
+  <img src="assets/credly-badges.svg" width="100%" alt="My Credly badges">
+</picture></a>
+```
+
 ## Advanced Usage
 
 ### Custom categorization
@@ -242,6 +294,48 @@ names rather than guessing, since issuers word and rename them differently:
 ```bash
 curl -s "https://www.credly.com/users/YOUR-USERNAME/badges.json" \
   | python -c "import json,sys; [print(b['badge_template']['name']) for b in json.load(sys.stdin)['data']]"
+```
+
+### Choose which badges show
+
+```yaml
+- uses: Sagargupta16/credly-badge-readme-action@v1
+  with:
+    credly-username: "your-username"
+    hide-expired: true # drop certifications past their Credly expiry date
+    sort: newest # newest first by issue date; oldest also works
+    max-badges: 12 # then keep the first 12
+```
+
+All three apply to README mode and the SVG cards alike, before categorization, so
+`max-badges: 12` means 12 badges in total, not 12 a category. A badge counts as expired
+from the day after its `expires_at_date`; a badge without one never expires. With
+`sort: newest` or `oldest`, badges issued the same day keep their profile order and
+badges without an issue date go last. The defaults keep every badge in your Credly
+profile order, which is what every earlier version did. Available from `v1.3.0`.
+
+### Let the action commit
+
+`commit: true` replaces the commit step. The action commits only the files it wrote
+(the README, the card, the phone card) as `github-actions[bot]`, only when one of them
+changed, and pushes to the branch the checkout is on. The job still needs
+`permissions: contents: write`. Available from `v1.3.0`.
+
+```yaml
+permissions:
+  contents: write
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Sagargupta16/credly-badge-readme-action@v1
+        with:
+          credly-username: "your-credly-username"
+          commit: true
+          commit-message: "chore: update Credly badges" # the default
 ```
 
 ### Conditional commit (only when changed)
@@ -298,23 +392,51 @@ README mode): [Unknown27s](https://github.com/Unknown27s/Unknown27s),
 ```mermaid
 flowchart TD
     A[Consumer workflow on a schedule] --> B[Fetch badges.json, every page]
-    B --> C[Categorize by keyword]
+    B --> S[hide-expired, sort, max-badges]
+    S --> C[Categorize by keyword]
     C --> D{output}
     D -->|readme or both| E[HTML between the README markers]
     D -->|svg or both| F[Fetch each image from images.credly.com]
     F --> G[Pillow shrinks it to 2x and encodes WebP]
-    G --> H[One self-contained animated SVG]
-    E --> I[Consumer commits when git diff sees a change]
+    G --> H[840px SVG card]
+    G --> M[340px phone card, when svg-mobile-path is set]
+    E --> I{commit}
     H --> I
+    M --> I
+    I -->|true| J[Action commits the changed files and pushes]
+    I -->|false| K[Your workflow commits when git diff sees a change]
 ```
 
 1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`, following
    `metadata.next_page_url` until the last page (Credly serves 48 badges a page)
-2. Categorizes each badge based on its name (using configurable keywords)
-3. Generates HTML with linked badge images from Credly's CDN
-4. Replaces content between `<!-- CREDLY-BADGES:START -->` and `<!-- CREDLY-BADGES:END -->` markers in your README
-5. With `output: svg` or `both`, downloads each badge image, inlines it as a data URI and writes one SVG card to `svg-path` (with `svg`, steps 3 and 4 are skipped)
-6. Reports badge counts via action outputs
+2. Applies `hide-expired`, `sort` and `max-badges`; the defaults keep every badge in profile order
+3. Categorizes each badge based on its name (using configurable keywords)
+4. Generates HTML with linked badge images from Credly's CDN
+5. Replaces content between `<!-- CREDLY-BADGES:START -->` and `<!-- CREDLY-BADGES:END -->` markers in your README
+6. With `output: svg` or `both`, downloads each badge image, inlines it as a data URI and writes one SVG card to `svg-path`, plus the phone card to `svg-mobile-path` when it is set (with `svg`, steps 4 and 5 are skipped)
+7. With `commit: true`, commits the written files and pushes when one of them changed
+8. Reports badge counts via action outputs
+
+## How it compares
+
+Two other projects put Credly badges on a GitHub profile. Features as their own READMEs
+describe them on 2026-10-18:
+
+| | This action | [pemtajo/badge-readme](https://github.com/pemtajo/badge-readme) | [credly-readme-stats](https://github.com/ebenezer-isaac/credly-readme-stats) |
+|---|---|---|---|
+| Runs as | GitHub Action | GitHub Action | Hosted service on Render, or self-hosted |
+| Reads Credly through | the public `badges.json` API | the profile page, in headless Chrome | not stated |
+| Writes | README section, SVG card, phone card | README section | SVG served from its URL |
+| Image lives in | your repo | Credly's CDN | the service |
+| Grouping | certifications, partner, learning | none | none |
+| Sort and filter | `sort`, `max-badges`, `hide-expired` | newest first, `NUMBER_LAST_BADGES` | `sort`, `max_items`, issuer and skill filters |
+| On a phone | README section wraps; the card has a 340px phone version | README section wraps | one width per URL (`card_width`) |
+| Themes | dark, with `accent` | plain images | 20 themes, light and dark |
+| Commits for you | with `commit: true` | yes | nothing to commit |
+
+Pick credly-readme-stats for themes and stats cards if a hosted image URL suits you.
+Pick this action for a card that is a file in your own repo, loads nothing external and
+has a phone layout.
 
 ## Design Decisions
 
@@ -335,6 +457,10 @@ flowchart TD
 - **Fail fast, retry only what can recover.** SVG inputs are validated before any network
   call. A `404` stops at once with the username hint; timeouts, `429` and `5xx` responses
   are retried, with a 5 s and then a 10 s wait at the default `max-retries` of 3.
+- **Two cards, not one responsive card.** GitHub serves README images through an
+  `<img>`, and an SVG in an `<img>` is laid out at its own `viewBox`, so it can only
+  shrink, never reflow. A `<picture>` with a `media` query picks between two fixed
+  layouts instead, and a phone loads only one of them.
 - **CI runs `action.yml` itself.** `v1.0.0` shipped with all five outputs empty because a
   composite action needs an explicit `value:` mapping, and unit tests never load
   `action.yml`. The `action` job now runs the action from the checkout against a live
@@ -356,8 +482,8 @@ If your badges live somewhere other than `README.md`, set `readme-path` to match
 
 ### The action succeeds but nothing is committed
 
-This action only edits the file on the runner. It never commits and never pushes -- your
-workflow does that. Check, in order:
+Unless you set `commit: true`, this action only edits the file on the runner and your
+workflow commits it. Check, in order:
 
 1. The job has `permissions: contents: write`.
 2. Your workflow actually has a commit-and-push step (see [Quick Start](#2-create-the-workflow)).
@@ -455,7 +581,17 @@ Credly serves: about 1.26 MB instead of 124 KB for the example card. A Pillow bu
 without WebP support inlines optimized PNGs instead (about 391 KB).
 
 The tests that need Pillow are skipped without it; run them with
-`uv run --with pytest --with pillow==13.0.0 python -m pytest -v`.
+`uv run --with pytest --with pillow==13.0.0 python -m pytest -v`. The `commit: true`
+tests run `git` against a local bare remote in a temporary folder.
+
+To refresh both example cards and the phone preview:
+
+```bash
+CREDLY_USERNAME=sagar-gupta.f8eb96cc OUTPUT=svg SVG_PATH=examples/credly-badges.svg \
+  SVG_MOBILE_PATH=examples/credly-badges-mobile.svg \
+  uv run --no-project --with pillow==13.0.0 python update-credly-badges.py
+uv run --no-project --with playwright --with pillow==13.0.0 python scripts/phone-preview.py
+```
 
 ## License
 
