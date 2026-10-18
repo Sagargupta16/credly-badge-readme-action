@@ -3,7 +3,9 @@
 import base64
 import importlib.util
 import io
+import json
 import sys
+import urllib.error
 import xml.etree.ElementTree as ET
 from itertools import pairwise
 from pathlib import Path
@@ -114,6 +116,47 @@ def test_update_readme_missing_markers_exits(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit):
         mod.update_readme("anything")
+
+
+# ---------------------------------------------------------------- fetching
+
+
+def test_fetch_badges_follows_every_page(monkeypatch):
+    first = "https://www.credly.com/users/someone/badges.json"
+    second = "https://www.credly.com/users/someone/badges.json?api=api&page=2"
+    pages = {
+        first: {"data": [make_badge("A")], "metadata": {"next_page_url": second}},
+        second: {"data": [make_badge("B")], "metadata": {"next_page_url": None}},
+    }
+    asked = []
+
+    def fake_fetch_url(url, accept):
+        asked.append(url)
+        return json.dumps(pages[url]).encode()
+
+    monkeypatch.setattr(mod, "fetch_url", fake_fetch_url)
+
+    data = mod.fetch_badges("someone")
+
+    assert data == {"data": [make_badge("A"), make_badge("B")]}
+    assert asked == [first, second]
+
+
+def test_fetch_badges_stops_at_a_wrong_username_without_retrying(monkeypatch, capsys):
+    calls = []
+
+    def not_found(req, timeout):
+        calls.append(req.full_url)
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", not_found)
+    monkeypatch.setattr(mod.time, "sleep", lambda s: pytest.fail("retried a 404"))
+
+    with pytest.raises(SystemExit):
+        mod.fetch_badges("no-such-user")
+
+    assert calls == ["https://www.credly.com/users/no-such-user/badges.json"]
+    assert "Credly user 'no-such-user' not found (404)" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------- README mode is frozen
