@@ -25,11 +25,13 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import textwrap
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NoReturn
 
@@ -43,7 +45,16 @@ OUTPUT = os.environ.get("OUTPUT", "readme").strip().lower()
 SVG_PATH = os.environ.get("SVG_PATH", "assets/credly-badges.svg")
 SVG_GROUPS = os.environ.get("SVG_GROUPS", "two").strip().lower()
 SVG_PER_ROW = os.environ.get("SVG_PER_ROW", "6,8")
+# the narrow phone card is drawn only when this is set
+SVG_MOBILE_PATH = os.environ.get("SVG_MOBILE_PATH", "").strip()
 ACCENT = os.environ.get("ACCENT", "#60a5fa")
+# Which badges to show, in what order: the defaults keep every badge in profile order
+HIDE_EXPIRED = os.environ.get("HIDE_EXPIRED", "false").strip().lower()
+SORT = os.environ.get("SORT", "credly").strip().lower()
+MAX_BADGES = os.environ.get("MAX_BADGES", "0").strip()
+# Commit and push the written files from inside the action
+COMMIT = os.environ.get("COMMIT", "false").strip().lower()
+COMMIT_MESSAGE = os.environ.get("COMMIT_MESSAGE", "chore: update Credly badges")
 
 # Keywords for badge categorization (comma-separated from env)
 CERT_KEYWORDS = [
@@ -138,6 +149,52 @@ def fetch_badges(username):
         if url and not url.startswith(CREDLY_USERS):
             fail(f"refusing to follow a page URL outside {CREDLY_USERS}: {url}")
     return {"data": badges}
+
+
+SORTS = ("credly", "newest", "oldest")
+
+
+def selection_settings() -> tuple[bool, str, int]:
+    """Validate the badge selection inputs and return (hide expired, sort, limit)."""
+    if HIDE_EXPIRED not in ("true", "false"):
+        fail(f"hide-expired must be true or false, got '{HIDE_EXPIRED}'.")
+    if SORT not in SORTS:
+        fail(f"sort must be credly, newest or oldest, got '{SORT}'.")
+    if not re.fullmatch(r"[0-9]+", MAX_BADGES):
+        fail(
+            f"max-badges must be a whole number, 0 for every badge, got '{MAX_BADGES}'."
+        )
+    return HIDE_EXPIRED == "true", SORT, int(MAX_BADGES)
+
+
+def badge_date(badge: dict, key: str) -> date | None:
+    """Return one of the badge's ISO date fields, or None when missing or malformed."""
+    try:
+        return date.fromisoformat(str(badge.get(key) or ""))
+    except ValueError:
+        return None
+
+
+def select_badges(
+    badges: list[dict], hide_expired: bool, sort: str, limit: int, today: date
+) -> list[dict]:
+    """Drop expired badges, sort by issue date, then keep the first limit (0 keeps all)."""
+    if hide_expired:
+        # still valid on its expiry day; a badge without an expiry date never expires
+        badges = [
+            badge
+            for badge in badges
+            if (expires := badge_date(badge, "expires_at_date")) is None
+            or expires >= today
+        ]
+    if sort != "credly":
+        dated = [b for b in badges if badge_date(b, "issued_at_date")]
+        # a stable sort, so badges issued the same day keep their profile order
+        dated.sort(
+            key=lambda b: badge_date(b, "issued_at_date"), reverse=sort == "newest"
+        )
+        badges = dated + [b for b in badges if not badge_date(b, "issued_at_date")]
+    return badges[:limit] if limit else badges
 
 
 def categorize_badges(badges):
@@ -286,6 +343,13 @@ MAX_PER_ROW = 12
 # the first group is drawn large, every group after it small
 LARGE = (84, 3, 8.5, 18)
 SMALL = (58, 2, 7.5, 16)
+# (card width px, group heading font px, first group spec, later groups spec).
+# GitHub draws a README 309px wide on a 375px phone (measured 2026-10-18), which
+# shrinks the 840px card to 37%. The 340px phone card is drawn at 91% there. It
+# draws badges at the desktop card's default sizes, so both share every image.
+DESKTOP = (SVG_WIDTH, 10, LARGE, SMALL)
+MOBILE = (340, 13, (84, 3, 11, 18), (58, 4, 10, 16))
+MOBILE_PER_ROW = [3, 4]
 ISSUER_PREFIXES = (
     "AWS Certified ",
     "HashiCorp Certified: ",
@@ -301,6 +365,8 @@ def svg_settings() -> tuple[list[int], str]:
         fail(f"svg-groups must be two or three, got '{SVG_GROUPS}'.")
     if not SVG_PATH.strip():
         fail("svg-path must not be empty.")
+    if SVG_MOBILE_PATH and Path(SVG_MOBILE_PATH) == Path(SVG_PATH):
+        fail("svg-mobile-path must differ from svg-path.")
     try:
         per_row = [int(n) for n in SVG_PER_ROW.split(",")]
     except ValueError:
@@ -356,10 +422,15 @@ def glyph(font: float) -> float:
     return 0.6 * font + 1
 
 
-def fit(spec: tuple, per_row: int) -> tuple:
+def line_step(font: float) -> int:
+    """Return the baseline distance between two label lines at this font size."""
+    return max(12, round(font * 1.35))
+
+
+def fit(spec: tuple, per_row: int, width: int = SVG_WIDTH) -> tuple:
     """Shrink a group's badge size and label width to fit per_row columns."""
     size, lines, font, chars = spec
-    col = (SVG_WIDTH - 32) / per_row
+    col = (width - 32) / per_row
     return (
         min(size, int(col) - 16),
         lines,
@@ -421,12 +492,18 @@ def svg_open(w: int, h: int, label: str) -> str:
 
 
 def badge_row(
-    cells: list[tuple[str, str]], top: int, delay: float, spec: tuple, per_row: int
+    cells: list[tuple[str, str]],
+    top: int,
+    delay: float,
+    spec: tuple,
+    per_row: int,
+    width: int = SVG_WIDTH,
 ) -> list[str]:
     """Return one centered row of floating badges with their wrapped labels."""
     size, lines, font, chars = spec
-    col = (SVG_WIDTH - 32) / per_row
-    x0 = 16 + (SVG_WIDTH - 32 - col * len(cells)) / 2
+    col = (width - 32) / per_row
+    x0 = 16 + (width - 32 - col * len(cells)) / 2
+    step = line_step(font)
     out = []
     for i, (title, image) in enumerate(cells):
         cx = x0 + col * i + col / 2
@@ -434,7 +511,7 @@ def badge_row(
             short_badge(title), chars, break_long_words=False, break_on_hyphens=False
         )
         text = "".join(
-            f'<text class="m" x="{cx:.1f}" y="{top + size + 16 + j * 12}" text-anchor="middle" '
+            f'<text class="m" x="{cx:.1f}" y="{top + size + 16 + j * step}" text-anchor="middle" '
             f'fill="rgba(255,255,255,0.7)" font-size="{label_font(line, font, col)}">'
             f"{html.escape(line.upper())}</text>"
             for j, line in enumerate(label[:lines])
@@ -449,9 +526,8 @@ def badge_row(
     return out
 
 
-def svg_frame(h: int, label: str) -> tuple[str, str]:
+def svg_frame(h: int, label: str, w: int = SVG_WIDTH) -> tuple[str, str]:
     """Return the card's opening markup and its closing shine sweep."""
-    w = SVG_WIDTH
     head = (
         svg_open(w, h, label)
         + f"<style>.m{{font-family:{MONO};font-weight:700;letter-spacing:1px}}"
@@ -469,25 +545,36 @@ def svg_frame(h: int, label: str) -> tuple[str, str]:
     tail = (
         f'<g clip-path="url(#card)"><rect x="-160" y="0" width="120" height="{h}" '
         'fill="url(#shine)" transform="skewX(-20)"><animateTransform attributeName="transform" '
-        'type="translate" values="0 0;1100 0" dur="6s" repeatCount="indefinite" additive="sum"/>'
+        # the sweep starts left of the card and ends past its right edge
+        f'type="translate" values="0 0;{w + 260} 0" dur="6s" repeatCount="indefinite" additive="sum"/>'
         "</rect></g></svg>\n"
     )
     return head, tail
 
 
 def render_svg(
-    groups: list[tuple[str, list[dict]]], per_row: list[int], accent: str
+    groups: list[tuple[str, list[dict]]],
+    per_row: list[int],
+    accent: str,
+    layout: tuple = DESKTOP,
+    images: dict | None = None,
 ) -> str:
-    """Return every badge as one self-contained, animated SVG card."""
-    parts, titles, images = [], [], {}
+    """Return every badge as one self-contained, animated SVG card.
+
+    images caches the data URIs by (URL, drawn size); pass the same dict to a
+    second card and an image drawn at the same size is fetched only once.
+    """
+    width, heading, first, later = layout
+    parts, titles = [], []
+    images = {} if images is None else images
     y, delay = 34, 0.2
     for i, (label, badges) in enumerate(groups):
         if not badges:
             continue
         # one per_row value per group; the last one repeats for later groups
         count = per_row[min(i, len(per_row) - 1)]
-        spec = fit(LARGE if i == 0 else SMALL, count)
-        size, lines = spec[0], spec[1]
+        spec = fit(first if i == 0 else later, count, width)
+        size, lines, font = spec[0], spec[1], spec[2]
         cells = []
         for badge in badges:
             template = badge.get("badge_template", {})
@@ -499,30 +586,66 @@ def render_svg(
             cells.append((title, images[url, size]))
             titles.append(title)
         parts.append(
-            f'<text class="m" x="24" y="{y}" fill="{accent}" font-size="10">'
+            f'<text class="m" x="24" y="{y}" fill="{accent}" font-size="{heading}">'
             f"{len(badges)} {html.escape(label.upper())}</text>"
         )
-        top = y + 14
+        top = y + heading + 4
         # at most count badges per row, so labels never collide
         for start in range(0, len(cells), count):
             row = cells[start : start + count]
-            parts += badge_row(row, top, delay, spec, count)
+            parts += badge_row(row, top, delay, spec, count, width)
             delay += 0.06 * len(row)
-            top += size + 16 + lines * 12 + 14
+            top += size + 16 + lines * line_step(font) + 14
         y = top + 12
-    head, tail = svg_frame(y - 10, "Credly badges: " + ", ".join(titles))
+    head, tail = svg_frame(y - 10, "Credly badges: " + ", ".join(titles), width)
     return "".join([head, *parts, tail])
 
 
-def write_svg(content: str) -> bool:
-    """Write the SVG card to SVG_PATH; return True when the file changed."""
-    path = Path(SVG_PATH)
+def write_svg(content: str, svg_path: str) -> bool:
+    """Write an SVG card to svg_path; return True when the file changed."""
+    path = Path(svg_path)
     if path.is_file() and path.read_text(encoding="utf-8") == content:
-        print(f"No changes detected in {SVG_PATH}.")
+        print(f"No changes detected in {svg_path}.")
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8", newline="\n")
-    print(f"SVG card written to {SVG_PATH}.")
+    print(f"SVG card written to {svg_path}.")
+    return True
+
+
+BOT_NAME = "github-actions[bot]"
+BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+def git(*args: str) -> subprocess.CompletedProcess:
+    """Run one git command in the working directory as github-actions[bot]."""
+    return subprocess.run(
+        ["git", "-c", f"user.name={BOT_NAME}", "-c", f"user.email={BOT_EMAIL}", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def commit_and_push(paths: list[str], message: str) -> bool:
+    """Commit only these files and push them; return False when none differs."""
+    result = git("add", "--", *paths)
+    if result.returncode:
+        fail(f"git add failed: {result.stderr.strip()}")
+    # exit status 1 means the staged files differ from HEAD
+    if not git("diff", "--cached", "--quiet", "--", *paths).returncode:
+        print("Nothing to commit.")
+        return False
+    result = git("commit", "--quiet", "-m", message, "--", *paths)
+    if result.returncode:
+        fail(f"git commit failed: {result.stderr.strip()}")
+    result = git("push", "--quiet")
+    if result.returncode:
+        fail(
+            f"git push failed: {result.stderr.strip()} "
+            "(the job needs permissions: contents: write)"
+        )
+    print(f"Committed and pushed {', '.join(paths)}.")
     return True
 
 
@@ -533,8 +656,13 @@ def main():
         sys.exit(1)
     if OUTPUT not in ("readme", "svg", "both"):
         fail(f"output must be readme, svg or both, got '{OUTPUT}'.")
+    # every input is checked before any network call, so a typo fails fast
+    hide_expired, sort, limit = selection_settings()
+    if COMMIT not in ("true", "false"):
+        fail(f"commit must be true or false, got '{COMMIT}'.")
+    if COMMIT == "true" and not COMMIT_MESSAGE.strip():
+        fail("commit-message must not be empty.")
     if OUTPUT != "readme":
-        # checked before any network call, so a typo fails fast
         per_row, accent = svg_settings()
 
     print(f"Fetching badges for Credly user: {CREDLY_USERNAME}")
@@ -546,28 +674,43 @@ def main():
         print(f"ERROR: Unexpected API response format: {type(badges)}")
         sys.exit(1)
 
-    total = len(badges)
-    print(f"Found {total} total badges on Credly.")
+    print(f"Found {len(badges)} total badges on Credly.")
+    today = datetime.now(UTC).date()
+    shown = select_badges(badges, hide_expired, sort, limit, today)
+    if len(shown) != len(badges):
+        print(f"Showing {len(shown)} after hide-expired and max-badges.")
+    total = len(shown)
 
-    certs, prof, know = categorize_badges(badges)
+    certs, prof, know = categorize_badges(shown)
     print(
         f"  Industry Certifications: {len(certs)}\n"
         f"  Professional & Partner:  {len(prof)}\n"
         f"  Knowledge & Learning:    {len(know)}"
     )
 
-    # The card is built before anything is written, so a failed image fetch
-    # leaves the README and the SVG exactly as they were.
-    card = None
+    # The cards are built before anything is written, so a failed image fetch
+    # leaves the README and the SVGs exactly as they were.
+    cards = []
     if OUTPUT != "readme":
-        card = render_svg(svg_groups(certs, prof, know, SVG_GROUPS), per_row, accent)
+        groups = svg_groups(certs, prof, know, SVG_GROUPS)
+        images = {}
+        cards.append((SVG_PATH, render_svg(groups, per_row, accent, DESKTOP, images)))
+        if SVG_MOBILE_PATH:
+            mobile = render_svg(groups, MOBILE_PER_ROW, accent, MOBILE, images)
+            cards.append((SVG_MOBILE_PATH, mobile))
 
     changed = False
+    written = []
     if OUTPUT != "svg":
         section = generate_section(certs, prof, know)
         changed = update_readme(section)
-    if card is not None:
-        changed = write_svg(card) or changed
+        written.append(README_PATH)
+    for path, content in cards:
+        changed = write_svg(content, path) or changed
+        written.append(path)
+
+    if COMMIT == "true" and changed:
+        commit_and_push(written, COMMIT_MESSAGE)
 
     # Write GitHub Actions outputs
     set_output("total-badges", str(total))

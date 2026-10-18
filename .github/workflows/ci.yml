@@ -108,17 +108,20 @@ jobs:
           credly-username: sagar-gupta.f8eb96cc
           output: svg
           svg-path: scratch.svg
+          svg-mobile-path: scratch-mobile.svg
 
-      - name: Assert the SVG card parses as XML and inlines WebP badges
+      - name: Assert both SVG cards parse as XML and inline WebP badges
         run: |
           python - <<'EOF'
           import os
           import xml.etree.ElementTree as ET
 
-          images = ET.parse("scratch.svg").getroot().iter("{http://www.w3.org/2000/svg}image")
-          hrefs = [image.get("href") for image in images]
-          assert hrefs, "scratch.svg has no badge images"
-          # the pinned Pillow wheel always has libwebp, so a PNG here means the WebP path broke
-          assert all(h.startswith("data:image/webp;base64,") for h in hrefs), "a badge image is not WebP"
-          print(f"scratch.svg parses as XML with {len(hrefs)} WebP badge images, {os.path.getsize('scratch.svg')} bytes")
+          for path, width in (("scratch.svg", "840"), ("scratch-mobile.svg", "340")):
+              root = ET.parse(path).getroot()
+              assert root.get("width") == width, f"{path} is {root.get('width')}px wide, not {width}"
+              hrefs = [image.get("href") for image in root.iter("{http://www.w3.org/2000/svg}image")]
+              assert hrefs, f"{path} has no badge images"
+              # the pinned Pillow wheel always has libwebp, so a PNG here means the WebP path broke
+              assert all(h.startswith("data:image/webp;base64,") for h in hrefs), f"a badge image in {path} is not WebP"
+              print(f"{path} parses as XML with {len(hrefs)} WebP badge images, {os.path.getsize(path)} bytes")
           EOF
