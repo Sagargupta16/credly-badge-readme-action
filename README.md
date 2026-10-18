@@ -106,8 +106,8 @@ That's it. Your badges will auto-update every Monday.
 | `knowledge-count` | Number of knowledge/learning badges |
 | `changed` | Whether the README or the SVG card was updated (`true`/`false`) |
 
-> **Note:** on the published `v1.0.0` these five outputs all resolve to an empty string.
-> See [Pinning and security](#pinning-and-security).
+> **Note:** `v1.0.0` only: these five outputs resolve to an empty string there. Fixed in
+> `v1.1.0`; `@v1` and every later tag set them. See [Pinning and security](#pinning-and-security).
 
 ## Example Output
 
@@ -169,7 +169,7 @@ the same bytes on every run, so `git diff` is an exact change check.
 - **Color**: `accent` sets the group label color. Quote it (`accent: "#f59e0b"`),
   since an unquoted `#` starts a YAML comment.
 - **Size**: when `output` is not `readme`, the action installs one pinned wheel,
-  `pillow==12.3.0`, shrinks each image to twice its drawn size, sharp on high-density
+  `pillow==13.0.0`, shrinks each image to twice its drawn size, sharp on high-density
   screens, and inlines it as WebP (quality 85, transparency kept exactly). The example
   above holds 22 badges in about 124 KB, against 391 KB with the PNG images that
   `v1.1.x` inlined. Every current browser draws WebP inside an SVG shown through
@@ -282,16 +282,63 @@ curl -s "https://www.credly.com/users/YOUR-USERNAME/badges.json" \
 
 ## Live Example
 
-See this action in use on [@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16#-certifications--badges) -- 6 industry certifications (5x AWS + Terraform). That workflow runs weekly, but it gates its commit step on the `changed` output while pinned to a release where that output is empty, so it commits nothing until it is re-pinned.
+[@Sagargupta16's profile README](https://github.com/Sagargupta16/Sagargupta16) runs this
+action every Monday, pinned to `v1.2.0` by commit SHA, with `output: both`. Its
+certifications card, `assets/svg/certs.svg`, is this action's SVG output: 22 Credly
+badges, including 5 active AWS certifications. The workflow commits only when `git diff`
+sees a change to the card or the badge section. On phones the profile swaps in a
+narrower grid that its own renderer builds from the images inside this card.
+
+**Used by** (public `@v1` workflows found by GitHub code search on 2026-10-18, all in
+README mode): [Unknown27s](https://github.com/Unknown27s/Unknown27s),
+[khaizr0](https://github.com/khaizr0/khaizr0) and [wogho](https://github.com/wogho/wogho).
 
 ## How It Works
 
-1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`
+```mermaid
+flowchart TD
+    A[Consumer workflow on a schedule] --> B[Fetch badges.json, every page]
+    B --> C[Categorize by keyword]
+    C --> D{output}
+    D -->|readme or both| E[HTML between the README markers]
+    D -->|svg or both| F[Fetch each image from images.credly.com]
+    F --> G[Pillow shrinks it to 2x and encodes WebP]
+    G --> H[One self-contained animated SVG]
+    E --> I[Consumer commits when git diff sees a change]
+    H --> I
+```
+
+1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`, following
+   `metadata.next_page_url` until the last page (Credly serves 48 badges a page)
 2. Categorizes each badge based on its name (using configurable keywords)
 3. Generates HTML with linked badge images from Credly's CDN
 4. Replaces content between `<!-- CREDLY-BADGES:START -->` and `<!-- CREDLY-BADGES:END -->` markers in your README
 5. With `output: svg` or `both`, downloads each badge image, inlines it as a data URI and writes one SVG card to `svg-path` (with `svg`, steps 3 and 4 are skipped)
 6. Reports badge counts via action outputs
+
+## Design Decisions
+
+- **README mode is standard library only.** The default path installs nothing, so a
+  consumer has no package tree to audit. Pillow is the one dependency, pinned, and only
+  installed when `output` is not `readme`.
+- **Same badges, same bytes.** With the pinned Pillow the card is byte-identical on every
+  run, and across the Windows and Linux `pillow==13.0.0` wheels (124,099 bytes both,
+  checked 2026-10-18). That is what lets a consumer use `git diff` as the change check
+  instead of trusting an output.
+- **Self-contained SVG.** GitHub shows README images through an `<img>`, which loads
+  nothing external, so every badge is inlined as a data URI. Shrinking each image to
+  twice its drawn size and encoding it as WebP takes the 22-badge example from 1,256,889
+  bytes to 124,099.
+- **Credly data is untrusted.** Every badge name and URL goes through `html.escape()`.
+  Images are fetched only from `https://images.credly.com/` (urllib would also open a
+  `file://` URL), and page links only under `https://www.credly.com/users/`.
+- **Fail fast, retry only what can recover.** SVG inputs are validated before any network
+  call. A `404` stops at once with the username hint; timeouts, `429` and `5xx` responses
+  are retried, with a 5 s and then a 10 s wait at the default `max-retries` of 3.
+- **CI runs `action.yml` itself.** `v1.0.0` shipped with all five outputs empty because a
+  composite action needs an explicit `value:` mapping, and unit tests never load
+  `action.yml`. The `action` job now runs the action from the checkout against a live
+  profile and fails on any empty output.
 
 ## Troubleshooting
 
@@ -335,8 +382,9 @@ curl -s "https://www.credly.com/users/YOUR-USERNAME/badges.json" | head -c 200
 ```
 
 A `404` means the username is wrong (it is the slug from your profile URL, which is not
-always your display name). An empty `data` array means the profile is private or has no
-accepted badges.
+always your display name). The action stops on it at once with
+`Credly user '<name>' not found (404)` instead of retrying. An empty `data` array means
+the profile is private or has no accepted badges.
 
 ## Pinning and Security
 
@@ -358,7 +406,7 @@ Security:
   an image URL on any other host is refused.
 - **No third-party dependencies in README mode.** The script is Python standard library
   only, so there is no transitive package tree to audit. SVG mode adds exactly one
-  package, `pillow==12.3.0`, installed as a prebuilt wheel (`--only-binary :all:`, so no
+  package, `pillow==13.0.0`, installed as a prebuilt wheel (`--only-binary :all:`, so no
   build step runs) and only when `output` is not `readme`.
 - **API data is escaped.** Badge names and URLs come from Credly and are treated as
   untrusted: every one is passed through `html.escape()` before it is interpolated into
@@ -399,7 +447,7 @@ To render the SVG card the way the action does, add Pillow:
 
 ```bash
 CREDLY_USERNAME=your-username OUTPUT=svg SVG_PATH=/tmp/card.svg \
-  uv run --no-project --with pillow==12.3.0 python update-credly-badges.py
+  uv run --no-project --with pillow==13.0.0 python update-credly-badges.py
 ```
 
 Without Pillow the card still renders, with every image inlined as the full-size PNG
@@ -407,7 +455,7 @@ Credly serves: about 1.26 MB instead of 124 KB for the example card. A Pillow bu
 without WebP support inlines optimized PNGs instead (about 391 KB).
 
 The tests that need Pillow are skipped without it; run them with
-`uv run --with pytest --with pillow==12.3.0 python -m pytest -v`.
+`uv run --with pytest --with pillow==13.0.0 python -m pytest -v`.
 
 ## License
 

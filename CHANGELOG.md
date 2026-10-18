@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.1] - 2026-10-18
+
+### Fixed
+
+- Profiles with more than 48 badges are no longer cut off. Credly serves `badges.json` 48 badges a page, and the script read only the first one; it now follows `metadata.next_page_url` to the last page, in README and SVG mode alike, so `total-badges` counts every badge. Only page links under `https://www.credly.com/users/` are followed.
+- A wrong username stops at once with `Credly user '<name>' not found (404). Use the slug from your profile URL.` instead of retrying for 15 seconds and ending in a raw `HTTPError` traceback. Other 4xx responses are not retried either; timeouts, `429` and `5xx` still are.
+
+### Changed
+
+- The action installs `pillow==13.0.0` (was `12.3.0`) for SVG mode. The card renders different bytes with it, so SVG-mode consumers get one card commit on their first run after upgrading; after that the same badges give the same bytes again. The 22-badge example card goes from 124,291 to 124,099 bytes, identical on the Windows and Linux wheels. README mode is unchanged and still installs nothing.
+- `examples/credly-badges.svg` re-rendered with `pillow==13.0.0`.
+- CI pins `ruff==0.17.1` (was `0.16.6`); the tree passes unchanged.
+- CI's `GITHUB_TOKEN` is limited to `contents: read`. No job writes; the three open CodeQL `actions/missing-workflow-permissions` alerts flagged the missing block.
+
+### Added
+
+- Tests for following a second page and for stopping on a 404 without a retry.
+- README: a flow diagram in How It Works, a Design Decisions section, a Used by list, and an up-to-date Live Example. The Outputs note now says the empty outputs were a `v1.0.0`-only bug.
+
 ## [1.2.0] - 2026-10-11
 
 ### Changed

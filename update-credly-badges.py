@@ -63,6 +63,9 @@ PROFESSIONAL_KEYWORDS = [
 # GitHub Actions output file
 GITHUB_OUTPUT = os.environ.get("GITHUB_OUTPUT", "")
 
+# Every badges.json page, the first and each next_page_url, lives under this prefix
+CREDLY_USERS = "https://www.credly.com/users/"
+
 
 def set_output(name, value):
     """Write a key=value pair to $GITHUB_OUTPUT if running in Actions."""
@@ -94,6 +97,13 @@ def fetch_url(url: str, accept: str) -> bytes:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.read()
         except (urllib.error.URLError, TimeoutError) as e:
+            # a 4xx other than 429 (a wrong username is a 404) fails the same way every time
+            if (
+                isinstance(e, urllib.error.HTTPError)
+                and 400 <= e.code < 500
+                and e.code != 429
+            ):
+                raise
             if attempt < attempts - 1:
                 wait = 5 * (attempt + 1)
                 print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
@@ -104,9 +114,30 @@ def fetch_url(url: str, accept: str) -> bytes:
 
 
 def fetch_badges(username):
-    """Fetch all badges from Credly public JSON API with retry logic."""
-    url = f"https://www.credly.com/users/{username}/badges.json"
-    return json.loads(fetch_url(url, "application/json").decode("utf-8"))
+    """Fetch every badge from the Credly public JSON API, one page at a time."""
+    url = f"{CREDLY_USERS}{username}/badges.json"
+    badges, seen = [], set()
+    # Credly serves 48 badges a page and links the next one in metadata.next_page_url
+    while url and url not in seen:
+        seen.add(url)
+        try:
+            page = json.loads(fetch_url(url, "application/json").decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                fail(
+                    f"Credly user '{username}' not found (404). "
+                    "Use the slug from your profile URL."
+                )
+            raise
+        data = page.get("data")
+        if not isinstance(data, list):
+            fail(f"Unexpected API response format: {type(data)}")
+        badges += data
+        url = (page.get("metadata") or {}).get("next_page_url")
+        # the URL comes from the API response, so only Credly's own pages are followed
+        if url and not url.startswith(CREDLY_USERS):
+            fail(f"refusing to follow a page URL outside {CREDLY_USERS}: {url}")
+    return {"data": badges}
 
 
 def categorize_badges(badges):
