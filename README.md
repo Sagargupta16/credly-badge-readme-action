@@ -389,6 +389,14 @@ README mode): [Unknown27s](https://github.com/Unknown27s/Unknown27s),
 
 ## How It Works
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/how-it-works-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/diagrams/how-it-works-light.svg">
+  <img width="880" src="docs/diagrams/how-it-works-light.svg" alt="How the action works: a weekly cron or workflow_dispatch runs credly-badge-readme-action, which fetches every page of badges.json from www.credly.com (48 badges a page, retrying 429, 5xx and timeouts), selects badges with hide-expired, sort and max-badges, and categorizes them into certifications, partner and learning. With output readme or both it writes the HTML section into README.md between the markers; with output svg or both it fetches each badge image from images.credly.com and writes the SVG cards with WebP images and an optional phone card. With commit true the action commits and pushes only when a file changed; with commit false your own commit step pushes when git diff sees a change. Either way the push lands on your profile README on GitHub. Credly is public and needs no token.">
+</picture>
+
+The spec behind the picture is [`docs/diagrams/how-it-works.yaml`](docs/diagrams/how-it-works.yaml), rendered with [orrery](https://github.com/Sagargupta16/orrery).
+
 ```mermaid
 flowchart TD
     A[Consumer workflow on a schedule] --> B[Fetch badges.json, every page]
