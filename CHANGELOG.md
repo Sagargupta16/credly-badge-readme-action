@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2026-10-21
+
+### Added
+
+- README: an architecture diagram in How It Works, drawn with [orrery](https://github.com/Sagargupta16/orrery) from `docs/diagrams/how-it-works.yaml` in a dark and a light version: the trigger, the fetch from Credly, badge selection and categorizing, the `output` branch, and the two commit paths. Docs only; the action is unchanged.
+
 ## [1.3.0] - 2026-10-18
 
 ### Added

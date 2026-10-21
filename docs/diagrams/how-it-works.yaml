@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Sagargupta16/orrery/main/skills/orrery/references/diagram.schema.json
+# Rendered with orrery (github.com/Sagargupta16/orrery):
+#   orrery render docs/diagrams/how-it-works.yaml -o docs/diagrams/how-it-works -f svg --theme both
+# Reviewed at README width: orrery review docs/diagrams/how-it-works.yaml --width 880
+title: How the action works
+subtitle: One Python script in a composite action. No token; Pillow is installed only for the SVG cards.
+direction: down
+layout: { spacing: compact }
+
+groups:
+  credly: { type: internet, label: "Credly, public, no token" }
+  action: { type: box, label: credly-badge-readme-action, evidence: "action.yml:96#composite" }
+  writes: { type: zone, label: Writes into your checkout, in: action, evidence: "update-credly-badges.py:716#build_cards" }
+
+nodes:
+  cron: { icon: tabler:clock, label: Weekly cron, note: or workflow_dispatch, evidence: "README.md:57#cron" }
+  api: { icon: si:credly, label: badges.json, note: "www.credly.com, 48 a page", in: credly, evidence: "update-credly-badges.py:129#badges.json" }
+  cdn: { icon: tabler:photo, label: images.credly.com, note: badge images, in: credly, evidence: "update-credly-badges.py:336#CREDLY_CDN" }
+  fetch: { icon: tabler:cloud-download, label: Fetch badges, note: "retries 429, 5xx, timeouts", in: action, evidence: "update-credly-badges.py:127#fetch_badges" }
+  select: { icon: tabler:filter, label: Select badges, note: "hide-expired, sort, max-badges", in: action, align: fetch, evidence: "update-credly-badges.py:178#select_badges" }
+  categorize: { icon: tabler:category, label: Categorize, note: "certifications, partner, learning", in: action, align: fetch, evidence: "update-credly-badges.py:200#categorize_badges" }
+  section: { icon: tabler:html, label: README section, note: HTML into README.md, in: writes, evidence: "update-credly-badges.py:293#update_readme" }
+  render: { icon: tabler:photo-down, label: SVG cards, note: WebP images; optional phone card, in: writes, evidence: "update-credly-badges.py:555#render_svg" }
+  commit: { icon: github:git-commit, label: Commit and push, note: only when a file changed, in: action, evidence: "update-credly-badges.py:630#commit_and_push" }
+  step: { icon: github:workflow, label: Your commit step, note: when git diff sees a change, evidence: "README.md:79#diff" }
+  github: { icon: logos:github-icon, label: Your profile README, note: on GitHub, align: step, evidence: "update-credly-badges.py:642#push" }
+
+edges:
+  - cron -> fetch: "uses: @v1"
+  - api -> fetch: every page
+  - fetch -> select -> categorize
+  - categorize -> section: "output: readme or both"
+  - categorize -> render: "output: svg or both"
+  - cdn -> render: each image
+  - writes -> commit: "commit: true"
+  - writes -> step: "commit: false"
+  - commit -> github: git push
+  - step -> github: git push
