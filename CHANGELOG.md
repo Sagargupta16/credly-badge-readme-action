@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.2] - 2026-10-24
+
+### Changed
+
+- README: redrew the How It Works diagram with orrery 0.12.0's 64 px icons (they were 48 px). The spec is unchanged; the figure is 731 px wide, so the README shows it at full size. Docs only; the action is unchanged.
+
 ## [1.3.1] - 2026-10-21
 
 ### Added
