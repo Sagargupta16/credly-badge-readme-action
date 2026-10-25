@@ -189,7 +189,7 @@ the same bytes on every run, so `git diff` is an exact change check.
 - **Size**: when `output` is not `readme`, the action installs one pinned wheel,
   `pillow==13.0.0`, shrinks each image to twice its drawn size, sharp on high-density
   screens, and inlines it as WebP (quality 85, transparency kept exactly). The example
-  above holds 22 badges in about 124 KB, against 391 KB with the PNG images that
+  above holds 22 badges in about 125 KB, against 391 KB with the PNG images that
   `v1.1.x` inlined. Every current browser draws WebP inside an SVG shown through
   `<img>`, which is how GitHub shows it. README mode installs nothing.
 
@@ -238,7 +238,7 @@ Then show the card in your README, linked to your Credly profile:
 ### Phone card
 
 GitHub draws a README 309px wide on a 375px phone, so the 840px card shrinks to 37% and
-its badge labels to 3.1px. Set `svg-mobile-path` and the action also writes a 340px
+its badge labels to 3.9px. Set `svg-mobile-path` and the action also writes a 340px
 card: three certifications and four other badges a row, labels of up to three and four lines,
 drawn at 91% on that phone with 10px labels. Both cards use the same images at the same
 sizes, so the second card downloads nothing extra; the example phone card is 126,085
@@ -452,13 +452,13 @@ has a phone layout.
   consumer has no package tree to audit. Pillow is the one dependency, pinned, and only
   installed when `output` is not `readme`.
 - **Same badges, same bytes.** With the pinned Pillow the card is byte-identical on every
-  run, and across the Windows and Linux `pillow==13.0.0` wheels (124,099 bytes both,
-  checked 2026-10-18). That is what lets a consumer use `git diff` as the change check
+  run, and across the Windows and Linux `pillow==13.0.0` wheels (124,099 bytes both for
+  the 1.3 card, checked 2026-10-18). That is what lets a consumer use `git diff` as the change check
   instead of trusting an output.
 - **Self-contained SVG.** GitHub shows README images through an `<img>`, which loads
   nothing external, so every badge is inlined as a data URI. Shrinking each image to
   twice its drawn size and encoding it as WebP takes the 22-badge example from 1,256,889
-  bytes to 124,099.
+  bytes to 124,099 (the 1.3 card; 1.4's larger labels add about 1.2 KB).
 - **Credly data is untrusted.** Every badge name and URL goes through `html.escape()`.
   Images are fetched only from `https://images.credly.com/` (urllib would also open a
   `file://` URL), and page links only under `https://www.credly.com/users/`.
@@ -585,7 +585,7 @@ CREDLY_USERNAME=your-username OUTPUT=svg SVG_PATH=/tmp/card.svg \
 ```
 
 Without Pillow the card still renders, with every image inlined as the full-size PNG
-Credly serves: about 1.26 MB instead of 124 KB for the example card. A Pillow built
+Credly serves: about 1.26 MB instead of 125 KB for the example card. A Pillow built
 without WebP support inlines optimized PNGs instead (about 391 KB).
 
 The tests that need Pillow are skipped without it; run them with

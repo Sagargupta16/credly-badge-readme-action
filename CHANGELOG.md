@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.0] - 2026-10-25
+
+### Changed
+
+- SVG card labels are 10.5 px, up from 8.5 px under certifications and 7.5 px under the other badges, and the group headings from 10 px. An 840 px card in an 831 px README column draws them at 10.4 px.
+- Each group gets one more label line (four under certifications, three under the rest), so the larger text drops fewer words. On the example profile's 22 badges, 3 labels lose a word against 4 before. The card grows to match: the example goes from 450 to 507 px tall and from 124,099 to 125,282 bytes.
+- A single word wider than its column still shrinks to fit, as before. On the example, `WELL-ARCHITECTED` under an 8-a-row badge is drawn at 8.2 px.
+- The card's height is rounded to a whole pixel, since a 10.5 px heading leaves the layout fractional.
+- README mode and the phone card are unchanged; the example phone card is byte-identical.
+
 ## [1.3.2] - 2026-10-24
 
 ### Changed
