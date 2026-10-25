@@ -340,14 +340,16 @@ JPEG_MAGIC = bytes([0xFF, 0xD8, 0xFF])
 PLAIN_DASHES = str.maketrans({0x2013: "-", 0x2014: "-"})
 MAX_PER_ROW = 12
 # (drawn size px, label lines, label font px, label characters per line):
-# the first group is drawn large, every group after it small
-LARGE = (84, 3, 8.5, 18)
-SMALL = (58, 2, 7.5, 16)
+# the first group is drawn large, every group after it small. Labels are 10.5 px, which
+# reads at 10.4 px in an 831 px README column; one more line than the 8.5 and 7.5 px labels
+# had keeps more names whole (on sagar-gupta.f8eb96cc's 22 badges 3 lose a word, against 4 before)
+LARGE = (84, 4, 10.5, 18)
+SMALL = (58, 3, 10.5, 16)
 # (card width px, group heading font px, first group spec, later groups spec).
 # GitHub draws a README 309px wide on a 375px phone (measured 2026-10-18), which
 # shrinks the 840px card to 37%. The 340px phone card is drawn at 91% there. It
 # draws badges at the desktop card's default sizes, so both share every image.
-DESKTOP = (SVG_WIDTH, 10, LARGE, SMALL)
+DESKTOP = (SVG_WIDTH, 10.5, LARGE, SMALL)
 MOBILE = (340, 13, (84, 3, 11, 18), (58, 4, 10, 16))
 MOBILE_PER_ROW = [3, 4]
 ISSUER_PREFIXES = (
@@ -597,7 +599,8 @@ def render_svg(
             delay += 0.06 * len(row)
             top += size + 16 + lines * line_step(font) + 14
         y = top + 12
-    head, tail = svg_frame(y - 10, "Credly badges: " + ", ".join(titles), width)
+    # a 10.5 px heading leaves y fractional; the card itself stays whole pixels
+    head, tail = svg_frame(round(y - 10), "Credly badges: " + ", ".join(titles), width)
     return "".join([head, *parts, tail])
 
 
