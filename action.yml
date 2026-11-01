@@ -98,7 +98,7 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
-        python-version: "3.13"
+        python-version: "3.15"
 
     # Pillow only shrinks the badge images inlined into the SVG card, so README
     # mode skips it. Pinned by hand: Renovate does not read versions in a run: block.
