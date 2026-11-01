@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.15"
       # Version pinned deliberately: ruff 0.16.0 grew its default ruleset from 59
       # rules to 413, which turned an unchanged tree red. Bump it here by hand,
       # Renovate does not read versions inside a `run:` block.
