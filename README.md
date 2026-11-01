@@ -397,24 +397,6 @@ README mode): [Unknown27s](https://github.com/Unknown27s/Unknown27s),
 
 The spec behind the picture is [`docs/diagrams/how-it-works.yaml`](docs/diagrams/how-it-works.yaml), rendered with [orrery](https://github.com/Sagargupta16/orrery).
 
-```mermaid
-flowchart TD
-    A[Consumer workflow on a schedule] --> B[Fetch badges.json, every page]
-    B --> S[hide-expired, sort, max-badges]
-    S --> C[Categorize by keyword]
-    C --> D{output}
-    D -->|readme or both| E[HTML between the README markers]
-    D -->|svg or both| F[Fetch each image from images.credly.com]
-    F --> G[Pillow shrinks it to 2x and encodes WebP]
-    G --> H[840px SVG card]
-    G --> M[340px phone card, when svg-mobile-path is set]
-    E --> I{commit}
-    H --> I
-    M --> I
-    I -->|true| J[Action commits the changed files and pushes]
-    I -->|false| K[Your workflow commits when git diff sees a change]
-```
-
 1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`, following
    `metadata.next_page_url` until the last page (Credly serves 48 badges a page)
 2. Applies `hide-expired`, `sort` and `max-badges`; the defaults keep every badge in profile order
