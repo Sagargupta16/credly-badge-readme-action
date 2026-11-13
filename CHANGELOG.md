@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.0] - 2026-11-13
+
+### Added
+
+- `include-other`: `true` also shows the badges on the profile's Other tab, the ones added to Credly from another issuer, which `badges.json` leaves out ([#22](https://github.com/Sagargupta16/credly-badge-readme-action/issues/22)). The action reads them from `https://www.credly.com/api/v1/users/{username}/external_badges/open_badges/public`, following every page, and adds them after the Credly badges, so the keyword categories, `hide-expired`, `sort`, `max-badges` and both SVG cards apply to them. Each links to the issuer's verification URL when it is `https`, else to the profile's Other tab; a badge whose image is not on `images.credly.com` is skipped with a message. Off by default, since Credly marks these badges unverified, so the README section and the cards are unchanged unless it is set.
+
 ## [1.4.0] - 2026-10-25
 
 ### Changed

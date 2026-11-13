@@ -27,6 +27,8 @@ this page on a phone and you get the narrower `svg-mobile-path` card instead.
   plus an optional [phone card](#phone-card) that stays readable on a 375px screen
 - [Choose the badges](#choose-which-badges-show): hide expired ones, sort newest or oldest
   first, cap the count
+- Optional [Other badges](#include-badges-from-the-other-tab): the ones you added to
+  Credly from another issuer
 - Optional [commit and push](#let-the-action-commit) from inside the action, so the
   workflow is one step
 - Configurable badge size, retry logic, and categorization keywords
@@ -107,6 +109,7 @@ That's it. Your badges will auto-update every Monday.
 | `svg-per-row` | No | `6,8` | Badges per row for each SVG group, 1 to 12; the last value repeats for later groups |
 | `svg-mobile-path` | No | empty | Also write the 340px [phone card](#phone-card) here (`svg` or `both`); empty draws none |
 | `accent` | No | `#60a5fa` | Hex color of the SVG group labels; quote it, an unquoted `#` starts a YAML comment |
+| `include-other` | No | `false` | `true` also shows the badges on your profile's [Other tab](#include-badges-from-the-other-tab) |
 | `hide-expired` | No | `false` | `true` leaves out badges whose Credly expiry date has passed |
 | `sort` | No | `credly` | `credly` keeps your profile order; `newest` or `oldest` sorts by issue date |
 | `max-badges` | No | `0` | Show at most this many badges, counted after `hide-expired` and `sort`; `0` shows all |
@@ -114,7 +117,7 @@ That's it. Your badges will auto-update every Monday.
 | `commit-message` | No | `chore: update Credly badges` | Message for the commit `commit: true` makes |
 
 `svg-mobile-path`, `hide-expired`, `sort`, `max-badges`, `commit` and `commit-message`
-are new in `v1.3.0`.
+are new in `v1.3.0`, and `include-other` in `v1.5.0`.
 
 ## Outputs
 
@@ -314,6 +317,25 @@ from the day after its `expires_at_date`; a badge without one never expires. Wit
 badges without an issue date go last. The defaults keep every badge in your Credly
 profile order, which is what every earlier version did. Available from `v1.3.0`.
 
+### Include badges from the Other tab
+
+Badges you add to Credly from another issuer (an Oracle or Microsoft certification
+uploaded by hand, say) sit on your profile's **Other** tab, which `badges.json` leaves
+out. `include-other: true` fetches them from that tab as well:
+
+```yaml
+- uses: Sagargupta16/credly-badge-readme-action@v1
+  with:
+    credly-username: "your-username"
+    include-other: true
+```
+
+They come after your Credly badges, and everything else applies to them the same way:
+the keyword categories, `hide-expired`, `sort`, `max-badges` and the SVG cards. Each one
+links to the issuer's verification page from the badge (your profile's Other tab when it
+has none). Credly marks these badges **Unverified**, since it did not issue them, which
+is why they are off by default. Available from `v1.5.0`.
+
 ### Let the action commit
 
 `commit: true` replaces the commit step. The action commits only the files it wrote
@@ -398,7 +420,8 @@ README mode): [Unknown27s](https://github.com/Unknown27s/Unknown27s),
 The spec behind the picture is [`docs/diagrams/how-it-works.yaml`](docs/diagrams/how-it-works.yaml), rendered with [orrery](https://github.com/Sagargupta16/orrery).
 
 1. Fetches badges from `https://www.credly.com/users/{username}/badges.json`, following
-   `metadata.next_page_url` until the last page (Credly serves 48 badges a page)
+   `metadata.next_page_url` until the last page (Credly serves 48 badges a page), and
+   with `include-other: true` the profile's Other tab the same way
 2. Applies `hide-expired`, `sort` and `max-badges`; the defaults keep every badge in profile order
 3. Categorizes each badge based on its name (using configurable keywords)
 4. Generates HTML with linked badge images from Credly's CDN
@@ -487,6 +510,12 @@ Your badge names did not match `cert-keywords` or `professional-keywords`. Match
 case-sensitive substring test, and the defaults are AWS-shaped. List your real badge
 names and pick keywords from them -- see
 [Custom categorization](#custom-categorization).
+
+### Badges on my Credly "Other" tab are missing
+
+They come from a different Credly endpoint, which the action reads only with
+`include-other: true` -- see
+[Include badges from the Other tab](#include-badges-from-the-other-tab).
 
 ### The badge section comes out empty
 

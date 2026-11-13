@@ -54,6 +54,10 @@ inputs:
     description: "Hex color of the SVG card's group labels"
     required: false
     default: "#60a5fa"
+  include-other:
+    description: "Also show the badges on your profile's Other tab, which you added from outside Credly and Credly marks unverified (true/false)"
+    required: false
+    default: "false"
   hide-expired:
     description: "Leave out badges whose expires_at_date has passed (true/false)"
     required: false
@@ -125,6 +129,7 @@ runs:
         SVG_PER_ROW: ${{ inputs.svg-per-row }}
         SVG_MOBILE_PATH: ${{ inputs.svg-mobile-path }}
         ACCENT: ${{ inputs.accent }}
+        INCLUDE_OTHER: ${{ inputs.include-other }}
         HIDE_EXPIRED: ${{ inputs.hide-expired }}
         SORT: ${{ inputs.sort }}
         MAX_BADGES: ${{ inputs.max-badges }}

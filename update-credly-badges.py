@@ -52,6 +52,8 @@ ACCENT = os.environ.get("ACCENT", "#60a5fa")
 HIDE_EXPIRED = os.environ.get("HIDE_EXPIRED", "false").strip().lower()
 SORT = os.environ.get("SORT", "credly").strip().lower()
 MAX_BADGES = os.environ.get("MAX_BADGES", "0").strip()
+# Also show the profile's Other tab: badges added from outside Credly, unverified
+INCLUDE_OTHER = os.environ.get("INCLUDE_OTHER", "false").strip().lower()
 # Commit and push the written files from inside the action
 COMMIT = os.environ.get("COMMIT", "false").strip().lower()
 COMMIT_MESSAGE = os.environ.get("COMMIT_MESSAGE", "chore: update Credly badges")
@@ -76,6 +78,8 @@ GITHUB_OUTPUT = os.environ.get("GITHUB_OUTPUT", "")
 
 # Every badges.json page, the first and each next_page_url, lives under this prefix
 CREDLY_USERS = "https://www.credly.com/users/"
+# and every page of the Other tab's badges under this one
+CREDLY_API_USERS = "https://www.credly.com/api/v1/users/"
 
 
 def set_output(name, value):
@@ -126,7 +130,43 @@ def fetch_url(url: str, accept: str) -> bytes:
 
 def fetch_badges(username):
     """Fetch every badge from the Credly public JSON API, one page at a time."""
-    url = f"{CREDLY_USERS}{username}/badges.json"
+    return {"data": fetch_pages(f"{CREDLY_USERS}{username}/badges.json", username)}
+
+
+def fetch_other_badges(username: str) -> list[dict]:
+    """Fetch the profile's Other tab (badges added from outside Credly), shaped like badges.json."""
+    url = f"{CREDLY_API_USERS}{username}/external_badges/open_badges/public?page=1&page_size=48"
+    badges = []
+    for record in fetch_pages(url, username):
+        ext = record.get("external_badge") or {}
+        image_url = ext.get("image_url") or ""
+        # the URLs come from the API: only Credly-hosted images, only https links
+        if not image_url.startswith(CREDLY_CDN):
+            print(
+                f"Skipping Other badge without a Credly image: {ext.get('badge_name')}"
+            )
+            continue
+        link = ext.get("badge_url") or ""
+        if not link.startswith("https://"):
+            link = f"{CREDLY_USERS}{username}/badges/other"
+        badges.append(
+            {
+                "id": record.get("id", ""),
+                "issued_at_date": ext.get("issued_at_date"),
+                "expires_at_date": ext.get("expires_at_date"),
+                "link": link,
+                "badge_template": {
+                    "name": ext.get("badge_name") or "Badge",
+                    "image_url": image_url,
+                },
+            }
+        )
+    return badges
+
+
+def fetch_pages(url: str, username: str) -> list[dict]:
+    """Return the data of every page, following metadata.next_page_url under Credly's own paths."""
+    prefix = CREDLY_API_USERS if url.startswith(CREDLY_API_USERS) else CREDLY_USERS
     badges, seen = [], set()
     # Credly serves 48 badges a page and links the next one in metadata.next_page_url
     while url and url not in seen:
@@ -146,9 +186,9 @@ def fetch_badges(username):
         badges += data
         url = (page.get("metadata") or {}).get("next_page_url")
         # the URL comes from the API response, so only Credly's own pages are followed
-        if url and not url.startswith(CREDLY_USERS):
-            fail(f"refusing to follow a page URL outside {CREDLY_USERS}: {url}")
-    return {"data": badges}
+        if url and not url.startswith(prefix):
+            fail(f"refusing to follow a page URL outside {prefix}: {url}")
+    return badges
 
 
 SORTS = ("credly", "newest", "oldest")
@@ -223,7 +263,8 @@ def badge_to_html(badge, size=BADGE_SIZE):
     name = template.get("name", "Badge")
     image_url = template.get("image_url", "")
     badge_id = badge.get("id", "")
-    badge_url = f"https://www.credly.com/badges/{badge_id}"
+    # an Other badge links to its issuer's page; a Credly badge to its Credly page
+    badge_url = badge.get("link") or f"https://www.credly.com/badges/{badge_id}"
 
     # Insert size prefix into Credly CDN URL
     sized_url = image_url.replace(
@@ -688,6 +729,8 @@ def main():
         fail(f"output must be readme, svg or both, got '{OUTPUT}'.")
     # every input is checked before any network call, so a typo fails fast
     hide_expired, sort, limit = selection_settings()
+    if INCLUDE_OTHER not in ("true", "false"):
+        fail(f"include-other must be true or false, got '{INCLUDE_OTHER}'.")
     commit_settings()
     svg = svg_settings() if OUTPUT != "readme" else None
 
@@ -701,6 +744,10 @@ def main():
         sys.exit(1)
 
     print(f"Found {len(badges)} total badges on Credly.")
+    if INCLUDE_OTHER == "true":
+        other = fetch_other_badges(CREDLY_USERNAME)
+        print(f"Found {len(other)} Other badges (added from outside Credly).")
+        badges = badges + other
     today = datetime.now(UTC).date()
     shown = select_badges(badges, hide_expired, sort, limit, today)
     if len(shown) != len(badges):
