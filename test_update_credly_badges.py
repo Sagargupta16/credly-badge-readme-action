@@ -161,6 +161,93 @@ def test_fetch_badges_stops_at_a_wrong_username_without_retrying(monkeypatch, ca
     assert "Credly user 'no-such-user' not found (404)" in capsys.readouterr().out
 
 
+OTHER = "https://www.credly.com/api/v1/users/someone/external_badges/open_badges/public"
+
+
+def other_record(name, image_url, badge_url, issued="2025-12-30"):
+    """One record of the Other tab's API, trimmed to the fields the action reads."""
+    return {
+        "id": f"id-{name}",
+        "public": True,
+        "external_badge": {
+            "badge_name": name,
+            "issuer_name": "Oracle",
+            "issued_at_date": issued,
+            "expires_at_date": None,
+            "badge_url": badge_url,
+            "image_url": image_url,
+            "verification_status": {"verified": False},
+        },
+    }
+
+
+def test_fetch_other_badges_shapes_every_page_like_badges_json(monkeypatch, capsys):
+    first = f"{OTHER}?page=1&page_size=48"
+    second = f"{OTHER}?page=2&page_size=48"
+    image = "https://images.credly.com/images/x/OCPJSE8.png"
+    pages = {
+        first: {
+            "data": [other_record("Java Pro", image, "https://oracle.example/v?id=1")],
+            "metadata": {"next_page_url": second},
+        },
+        second: {
+            "data": [
+                other_record("No link", image, "javascript:alert(1)"),
+                other_record("Offsite image", "https://evil.example/x.png", ""),
+            ],
+            "metadata": {"next_page_url": None},
+        },
+    }
+    asked = []
+
+    def fake_fetch_url(url, accept):
+        asked.append(url)
+        return json.dumps(pages[url]).encode()
+
+    monkeypatch.setattr(mod, "fetch_url", fake_fetch_url)
+
+    badges = mod.fetch_other_badges("someone")
+
+    assert asked == [first, second]
+    assert badges == [
+        {
+            "id": "id-Java Pro",
+            "issued_at_date": "2025-12-30",
+            "expires_at_date": None,
+            "link": "https://oracle.example/v?id=1",
+            "badge_template": {"name": "Java Pro", "image_url": image},
+        },
+        {
+            "id": "id-No link",
+            "issued_at_date": "2025-12-30",
+            "expires_at_date": None,
+            # a non-https issuer link falls back to the profile's Other tab
+            "link": "https://www.credly.com/users/someone/badges/other",
+            "badge_template": {"name": "No link", "image_url": image},
+        },
+    ]
+    assert "Skipping Other badge without a Credly image: Offsite image" in (
+        capsys.readouterr().out
+    )
+
+
+def test_fetch_other_badges_refuses_a_next_page_outside_credly(monkeypatch):
+    page = {"data": [], "metadata": {"next_page_url": "https://evil.example/p2"}}
+    monkeypatch.setattr(mod, "fetch_url", lambda url, accept: json.dumps(page).encode())
+
+    with pytest.raises(SystemExit):
+        mod.fetch_other_badges("someone")
+
+
+def test_badge_to_html_links_an_other_badge_to_its_issuer():
+    badge = make_badge("Java Pro") | {"link": "https://oracle.example/v?id=1&a=b"}
+
+    tag = mod.badge_to_html(badge, size=100)
+
+    assert 'href="https://oracle.example/v?id=1&amp;a=b"' in tag
+    assert "images.credly.com/size/100x100/images/" in tag
+
+
 # ---------------------------------------------------------------- choosing badges
 
 TODAY = date(2026, 10, 18)
@@ -669,6 +756,10 @@ def stub_profile(tmp_path, monkeypatch, output):
     svg = tmp_path / "assets" / "credly-badges.svg"
     outputs = tmp_path / "github-output"
     monkeypatch.setattr(mod, "fetch_badges", lambda username: {"data": FROZEN_BADGES})
+    # include-other is off by default, so the Other tab is never fetched
+    monkeypatch.setattr(
+        mod, "fetch_other_badges", lambda username: pytest.fail("fetched Other")
+    )
     settings = {
         "CREDLY_USERNAME": "someone",
         "OUTPUT": output,
@@ -681,6 +772,7 @@ def stub_profile(tmp_path, monkeypatch, output):
         "HIDE_EXPIRED": "false",
         "SORT": "credly",
         "MAX_BADGES": "0",
+        "INCLUDE_OTHER": "false",
         "COMMIT": "false",
         "GITHUB_OUTPUT": str(outputs),
     }
@@ -776,9 +868,36 @@ def test_main_counts_only_the_badges_shown(tmp_path, monkeypatch, fetched):
     )
 
 
+def test_main_include_other_adds_the_other_tab_after_credly_badges(
+    tmp_path, monkeypatch, fetched
+):
+    readme, _, outputs = stub_profile(tmp_path, monkeypatch, "readme")
+    other = make_badge("Oracle Certified Java Pro") | {
+        "link": "https://oracle.example/v"
+    }
+    monkeypatch.setattr(mod, "fetch_other_badges", lambda username: [other])
+    monkeypatch.setattr(mod, "INCLUDE_OTHER", "true")
+
+    mod.main()
+
+    section = readme.read_text(encoding="utf-8")
+    assert (
+        'href="https://oracle.example/v" title="Oracle Certified Java Pro"' in section
+    )
+    # the keyword categories apply to Other badges too: "Certified" is a certification
+    assert outputs.read_text(encoding="utf-8").startswith(
+        "total-badges=5\ncertifications-count=3\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("setting", "value"),
-    [("COMMIT", "yes"), ("SORT", "random"), ("MAX_BADGES", "1.5")],
+    [
+        ("COMMIT", "yes"),
+        ("SORT", "random"),
+        ("MAX_BADGES", "1.5"),
+        ("INCLUDE_OTHER", "yes"),
+    ],
 )
 def test_main_rejects_bad_inputs_before_fetching(tmp_path, monkeypatch, setting, value):
     stub_profile(tmp_path, monkeypatch, "readme")
