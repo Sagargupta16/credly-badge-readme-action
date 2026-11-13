@@ -536,7 +536,7 @@ the profile is private or has no accepted badges.
 Pin to a full commit SHA and record the human-readable version in a trailing comment:
 
 ```yaml
-- uses: Sagargupta16/credly-badge-readme-action@4026ed5438d30856fa7e65b8aa0bd6702777ed48 # v1.4.0
+- uses: Sagargupta16/credly-badge-readme-action@db25a633f92eccb1767692c8c3abdf035f7259b9 # v1.5.0
 ```
 
 `@v1` is a moving major tag: it follows the latest 1.x release, so it changes under you;
