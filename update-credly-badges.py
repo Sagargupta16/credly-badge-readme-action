@@ -7,7 +7,8 @@ Fetches badges from the Credly public API, categorizes them into
 Industry Certifications, Professional/Partner Badges, and Knowledge/Learning Badges,
 then updates the README between <!-- CREDLY-BADGES:START --> and <!-- CREDLY-BADGES:END --> markers.
 With OUTPUT=svg (or both) it draws every badge into one self-contained,
-animated SVG card at SVG_PATH instead (or as well).
+animated SVG card at SVG_PATH instead (or as well). STYLE=flat draws the
+card, and the phone card, in the newer flat look.
 
 Usage as GitHub Action:
   See action.yml for inputs/outputs.
@@ -23,12 +24,14 @@ import base64
 import html
 import io
 import json
+import math
 import os
 import re
 import subprocess
 import sys
 import textwrap
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from datetime import UTC, date, datetime
@@ -48,6 +51,8 @@ SVG_PER_ROW = os.environ.get("SVG_PER_ROW", "6,8")
 # the narrow phone card is drawn only when this is set
 SVG_MOBILE_PATH = os.environ.get("SVG_MOBILE_PATH", "").strip()
 ACCENT = os.environ.get("ACCENT", "#60a5fa")
+# How the cards look: classic (the card every earlier version drew) or flat
+STYLE = os.environ.get("STYLE", "classic").strip().lower()
 # Which badges to show, in what order: the defaults keep every badge in profile order
 HIDE_EXPIRED = os.environ.get("HIDE_EXPIRED", "false").strip().lower()
 SORT = os.environ.get("SORT", "credly").strip().lower()
@@ -645,6 +650,512 @@ def render_svg(
     return "".join([head, *parts, tail])
 
 
+# ---------------------------------------------------------------- flat style
+# style: flat draws both cards in the newer look of Sagargupta16/Sagargupta16
+# (scripts/kit.py, and certs_mobile in scripts/cards/stats.py for the phone card):
+# one flat surface with a hairline border, every badge in its finished place on a
+# tile, mono micro-labels that carry the counts, and one loop, a lit border that
+# walks the first group's tiles on a 12 s clock. Each entrance holds its start
+# value until its turn and the elements' own attributes are the finished frame,
+# so a still render (a link preview, a viewer without SMIL) shows the whole card.
+STYLES = ("classic", "flat")
+CARD = "#0f171c"  # a tile that holds a badge and its name
+INK = "#f3f4f6"  # certification names
+BODY = "rgba(255,255,255,0.78)"  # the other badges' names
+META = "rgba(255,255,255,0.62)"  # group headings and the +N more line
+HAIR = "rgba(255,255,255,0.09)"  # the card's border
+HAIR_STRONG = "rgba(255,255,255,0.14)"  # a tile's border
+HAIR_FILL = "rgba(255,255,255,0.03)"  # a phone tile, which holds only an image
+SANS = "'Segoe UI',Inter,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif"
+TRACK = 1.2  # letter-spacing of a mono micro-label
+# The smallest text: 10.5 px on the 840 px card, 11.5 px on the 320 px phone card.
+# A name that does not fit its tile wraps; nothing shrinks below these.
+MICRO, MICRO_PHONE = 10.5, 11.5
+EASE = "0.16 1 0.3 1"  # entrances ease out
+# The inlined images are most of a card's weight, so together they stay inside
+# IMAGE_BUDGET characters of data URI, which keeps a card well under 100 KB however
+# many badges a profile has. The first group takes the budget first, in whole rows,
+# and a group's badges that do not fit are counted in a "+N MORE ON CREDLY" line.
+IMAGE_BUDGET = 64_000
+# drawn size of a certification and of every other badge; fetched at twice that
+FLAT_CERT, FLAT_BADGE = 64, 48
+PAD = 24
+PHONE, PHONE_PAD = 320, 18
+# the phone card: certifications three a row on tiles, other badges five a row,
+# one row a group while there are certifications above them
+PHONE_ROWS = [3, 5]
+SLIDE = 0.35  # how long the lit border takes to reach the next tile in a row
+LIT_MAX = 16  # the lit border walks at most this many tiles, 1.5 s each in 24 s
+
+
+def advance(character: str) -> float:
+    """Return the rough width of one sans character, in em."""
+    if unicodedata.combining(character):
+        return 0
+    if unicodedata.east_asian_width(character) in {"W", "F"}:
+        return 1.05
+    if character in "W@%M":
+        return 1
+    if character in "ilI.,:;'!|`":
+        return 0.34
+    if character in " fjrt()[]":
+        return 0.44
+    return 0.7 if character.isupper() else 0.58
+
+
+def text_width(text: str, size: float, mono: bool = False) -> float:
+    """Measure text conservatively: sans advances, or monospace plus its tracking."""
+    if mono:
+        return len(text) * (size * 0.6 + TRACK)
+    return sum(advance(character) for character in text) * size
+
+
+def wrap_text(text: str, room: float, size: float, mono: bool = False) -> list[str]:
+    """Wrap words to a pixel width, splitting a token too long for a line, dropping nothing."""
+    lines, current = [], ""
+    for word in text.split():
+        candidate = f"{current} {word}" if current else word
+        if text_width(candidate, size, mono) <= room:
+            current = candidate
+            continue
+        if current:
+            # a token wider than the line splits anyway, so it starts on this line; so
+            # does a long one with a "/", "-", "_" or "." to break at after a short line
+            token = text_width(word, size, mono)
+            short_line = text_width(current, size, mono) < room / 2
+            breakable = token > room * 0.75 and re.search("[/_.-].", word)
+            if token > room or (short_line and breakable):
+                current += " "
+            else:
+                lines.append(current)
+                current = ""
+        # a token too long for a line breaks after "/", "-", "_" or "." first,
+        # and only splits between letters where no separator fits
+        for piece in re.findall(r"[^/\-_.]+[/\-_.]*|[/\-_.]+", word):
+            if current.strip() and text_width(current + piece, size, mono) > room:
+                lines.append(current.rstrip())
+                current = ""
+            for character in piece:
+                if (
+                    current.strip()
+                    and text_width(current + character, size, mono) > room
+                ):
+                    lines.append(current.rstrip())
+                    current = ""
+                current += character
+    if current:
+        lines.append(current)
+    return lines
+
+
+def clip(text: str, room: float, size: float) -> str:
+    """Shorten sans text to a width: whole words first, then letters, ending in three dots."""
+    if text_width(text, size) <= room:
+        return text
+    while " " in text and text_width(text + "...", size) > room:
+        text = text.rsplit(" ", 1)[0]
+    while len(text) > 1 and text_width(text + "...", size) > room:
+        text = text[:-1]
+    return text.rstrip(" ,;:.-") + "..."
+
+
+def name_lines(name: str, room: float, size: float, cap: int) -> list[str]:
+    """Wrap a badge name to its tile and keep at most cap lines, the last clipped with three dots."""
+    lines = wrap_text(name, room, size)
+    if len(lines) <= cap:
+        return lines
+    return [*lines[: cap - 1], clip(" ".join(lines[cap - 1 :]), room, size)]
+
+
+def num(value: float) -> str:
+    """Return a coordinate to two places at most, with no trailing zeros and never -0."""
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return "0" if text in ("-0", "") else text
+
+
+def flat_text(
+    x: float,
+    y: float,
+    content: str,
+    size: float,
+    fill: str,
+    cls: str = "m",
+    anchor: str = "",
+) -> str:
+    """Return one text element: class m is a mono micro-label, s a sans name."""
+    align = f' text-anchor="{anchor}"' if anchor else ""
+    return (
+        f'<text class="{cls}" x="{num(x)}" y="{num(y)}" font-size="{size:g}" fill="{fill}"{align}>'
+        f"{html.escape(content)}</text>"
+    )
+
+
+def flat_rect(
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    fill: str,
+    stroke: str = HAIR_STRONG,
+    extra: str = "",
+    inner: str = "",
+) -> str:
+    """Return a tile: a rounded rectangle with one border, holding inner if given."""
+    head = (
+        f'<rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" rx="10" '
+        f'fill="{fill}" stroke="{stroke}"{extra}'
+    )
+    return f"{head}>{inner}</rect>" if inner else f"{head}/>"
+
+
+def entrance(at: float, body: str) -> str:
+    """Wrap a block so it fades in and rises 8 px at `at`, poster-safe.
+
+    The animation runs from 0 s and holds its start value until `at`; the block's own
+    attributes are the finished frame, so a still render shows it in place.
+    """
+    total = at + 0.4
+    timing = (
+        f'keyTimes="0;{at / total:.3f};1" dur="{total:.2f}s" fill="freeze" '
+        f'calcMode="spline" keySplines="0 0 1 1;{EASE}"'
+    )
+    return (
+        f'<g><animate attributeName="opacity" values="0;0;1" {timing}/>'
+        f'<animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0" {timing}/>'
+        f"{body}</g>"
+    )
+
+
+def turn(index: int) -> float:
+    """Return when block number index enters, in reading order: 0.08 s apart, all by 1.2 s."""
+    return min(0.15 + index * 0.08, 1.2)
+
+
+def clock_loop(
+    attribute: str, points: list[tuple[float, str]], dur: float, extra: str = ""
+) -> str:
+    """Return a repeating animation through (seconds, value) points from 0 to dur."""
+    values = ";".join(value for _, value in points)
+    times = ";".join(f"{round(second / dur, 4):g}" for second, _ in points)
+    tag = "animateTransform" if attribute == "transform" else "animate"
+    kind = ' type="translate"' if attribute == "transform" else ""
+    return (
+        f'<{tag} attributeName="{attribute}"{kind} values="{values}" keyTimes="{times}"{extra} '
+        f'dur="{dur:g}s" repeatCount="indefinite"/>'
+    )
+
+
+def stepper(offsets: list[tuple[float, float]]) -> str:
+    """Walk the element this sits in through (dx, dy) offsets, one slot each.
+
+    The loop is 12 s when each tile gets 1.5 s or more, else 24 s. Along a row the
+    border slides; to a new row, and back to the first tile, it fades out, jumps and
+    fades in. A lone tile has nowhere to go, so its border breathes on a 3 s beat.
+    """
+    count = len(offsets)
+    if count < 2:
+        return clock_loop("opacity", [(0.0, "1"), (1.5, "0.4"), (3.0, "1")], 3)
+    loop = 12 if count * 1.5 <= 12 else 24
+    slot = loop / count
+    moves, fades, splines = [(0.0, offsets[0])], [(0.0, "1")], []
+    for index in range(1, count + 1):
+        end = loop if index == count else index * slot
+        before, after = offsets[index - 1], offsets[index % count]
+        along = index < count and (before[0] == after[0] or before[1] == after[1])
+        if along:
+            moves += [(end - SLIDE, before), (end, after)]
+            splines += ["0 0 1 1", "0.4 0 0.2 1"]
+        else:
+            moves += [(end - 0.2, before), (end - 0.19, after)]
+            splines += ["0 0 1 1", "0 0 1 1"]
+            fades += [
+                (end - 0.35, "1"),
+                (end - 0.2, "0"),
+                (end - 0.15, "0"),
+                (end, "1"),
+            ]
+    if moves[-1][0] < loop:
+        moves.append((loop, moves[-1][1]))
+        splines.append("0 0 1 1")
+    if fades[-1][0] < loop:
+        fades.append((loop, "1"))
+    spline = f' calcMode="spline" keySplines="{";".join(splines)}"'
+    out = clock_loop(
+        "transform",
+        [(t, f"{num(dx)} {num(dy)}") for t, (dx, dy) in moves],
+        loop,
+        spline,
+    )
+    if len(fades) > 2:
+        out += clock_loop("opacity", fades, loop)
+    return out
+
+
+def lit_border(
+    places: list[tuple[float, float]], w: float, h: float, accent: str
+) -> str:
+    """Return the lit border: an accent tint and edge that walks the tiles at places."""
+    x0, y0 = places[0]
+    offsets = [(x - x0, y - y0) for x, y in places[:LIT_MAX]]
+    extra = ' fill-opacity="0.14" stroke-width="1.5"'
+    return flat_rect(x0, y0, w, h, accent, accent, extra, stepper(offsets))
+
+
+def card_image(images: dict, badge: dict, size: int) -> str:
+    """Return the badge's image drawn at size as a data URI, fetched once per (URL, size)."""
+    url = badge.get("badge_template", {}).get("image_url", "")
+    if (url, size) not in images:
+        images[url, size] = badge_data_uri(url, size * 2)
+    return images[url, size]
+
+
+def within_budget(badges: list[dict], budget: int, row: int, image) -> list[dict]:
+    """Return the badges, in order, whose images fit the budget, cut back to whole rows.
+
+    image(badge) returns its data URI, so images are fetched only until the budget
+    runs out. When not even one whole row fits, the badges that fit stay.
+    """
+    shown, used = [], 0
+    for badge in badges:
+        used += len(image(badge))
+        if used > budget:
+            break
+        shown.append(badge)
+    if len(shown) < len(badges):
+        shown = shown[: len(shown) - len(shown) % row] or shown
+    return shown
+
+
+def flat_pick(
+    groups: list[tuple[str, list[dict]]], rows: list[int], image, one_row: bool = False
+) -> list[list[dict]]:
+    """Return the badges each group shows, every image inside one IMAGE_BUDGET, first group first.
+
+    rows holds the badges a row for each group, the last value repeating. image(badge, i)
+    returns the data URI group i draws. With one_row, a group after the first shows one
+    row at most when the first group has badges (the phone card).
+    """
+    left, picks = IMAGE_BUDGET, []
+    for i, (_, badges) in enumerate(groups):
+        row = rows[min(i, len(rows) - 1)]
+        pool = badges[:row] if one_row and i and groups[0][1] else badges
+        shown = within_budget(pool, left, row, lambda badge, i=i: image(badge, i))
+        left -= sum(len(image(badge, i)) for badge in shown)
+        picks.append(shown)
+    return picks
+
+
+def badge_name(badge: dict) -> str:
+    return plain_dashes(badge.get("badge_template", {}).get("name", "Badge"))
+
+
+def flat_open(w: int, h: int, groups: list[tuple[str, list[dict]]]) -> str:
+    """Return the opening markup of a flat card: root, text classes and the surface."""
+    names = [badge_name(badge) for _, badges in groups for badge in badges]
+    return (
+        svg_open(w, h, f"{len(names)} Credly badges: " + ", ".join(names))
+        + f"<style>.m{{font-family:{MONO};font-weight:700;letter-spacing:{TRACK}px}}"
+        f".s{{font-family:{SANS};font-weight:600}}</style>"
+        f'<rect x="0.5" y="0.5" width="{w - 1}" height="{h - 1}" rx="14" fill="{SVG_BG}" '
+        f'stroke="{HAIR}"/>'
+    )
+
+
+def more_line(
+    shown: int, count: int, x: float, y: float, room: float, size: float, at: float
+) -> tuple[str, float]:
+    """Return what a group has no room for, counted and found on Credly, and the y under it."""
+    note = f"+{count - shown} MORE ON CREDLY" if shown else f"{count} ON CREDLY"
+    body = []
+    y += 12
+    for line in wrap_text(note, room, size, True):
+        y += 16
+        body.append(flat_text(x, y, line, size, META))
+    return entrance(at, "".join(body)), y
+
+
+def headings(
+    text: str, x: float, y: float, room: float, size: float
+) -> tuple[str, float]:
+    """Return a group heading, wrapped to the room and never shrunk, and its last baseline."""
+    out = []
+    for index, line in enumerate(wrap_text(text, room, size, True)):
+        out.append(flat_text(x, y + index * 16, line, size, META))
+    return "".join(out), y + (len(out) - 1) * 16
+
+
+def render_flat(
+    groups: list[tuple[str, list[dict]]],
+    per_row: list[int],
+    accent: str,
+    images: dict | None = None,
+) -> str:
+    """Return the 840 px card in the flat style (see the comment above STYLES).
+
+    images caches the data URIs by (URL, drawn size), as render_svg does.
+    """
+    images = {} if images is None else images
+    room = SVG_WIDTH - 2 * PAD
+    # (badges a row, gap, tile width, drawn size) of each group
+    shapes = []
+    for i in range(len(groups)):
+        count = per_row[min(i, len(per_row) - 1)]
+        gap = 12 if i == 0 else 10
+        w = (room - gap * (count - 1)) / count
+        size = min(FLAT_CERT, int(w) - 24) if i == 0 else min(FLAT_BADGE, int(w) - 20)
+        shapes.append((count, gap, w, size))
+    picks = flat_pick(
+        groups, per_row, lambda badge, i: card_image(images, badge, shapes[i][3])
+    )
+    total = sum(len(badges) for _, badges in groups)
+    parts = [flat_text(PAD, 30, f"{total} CREDLY BADGES", MICRO, accent)]
+    y, block, walked = 30, 0, False
+    for i, ((label, badges), shown) in enumerate(zip(groups, picks)):
+        if not badges:
+            continue
+        count, gap, w, size = shapes[i]
+        heading, y = headings(
+            f"{len(badges)} {label.upper()}", PAD, y + 28, room, MICRO
+        )
+        parts.append(heading)
+        y += 12
+        # certification names in ink, up to four lines; the other badges' in body, three
+        font, step, fill, cap = (12, 15, INK, 4) if i == 0 else (11, 14, BODY, 3)
+        names = [
+            name_lines(short_badge(badge_name(b)), w - 12, font, cap) for b in shown
+        ]
+        tall = max((len(lines) for lines in names), default=0)
+        h = 12 + size + 12 + (font + (tall - 1) * step + 14 if tall else 0)
+        tiles, places, rows = [], [], []
+        for start in range(0, len(shown), count):
+            row = shown[start : start + count]
+            x0 = PAD + (room - w * len(row) - gap * (len(row) - 1)) / 2
+            body = []
+            for j, badge in enumerate(row):
+                x = x0 + j * (w + gap)
+                places.append((x, y))
+                tiles.append(flat_rect(x, y, w, h, CARD))
+                body.append(
+                    f"<g><title>{html.escape(badge_name(badge))}</title>"
+                    f'<image href="{card_image(images, badge, size)}" x="{num(x + (w - size) / 2)}" '
+                    f'y="{num(y + 12)}" width="{size}" height="{size}"/></g>'
+                )
+                body += [
+                    flat_text(
+                        x + w / 2,
+                        y + 24 + size + font + k * step,
+                        line,
+                        font,
+                        fill,
+                        "s",
+                        "middle",
+                    )
+                    for k, line in enumerate(names[start + j])
+                ]
+            rows.append("".join(body))
+            y += h + gap
+        if shown:
+            y -= gap
+            if not walked:
+                tiles.append(lit_border(places, w, h, accent))
+                walked = True
+            parts.append(entrance(turn(block), "".join(tiles)))
+            parts += [entrance(turn(block + r), row) for r, row in enumerate(rows)]
+            block += len(rows)
+        if len(shown) < len(badges):
+            note, y = more_line(
+                len(shown), len(badges), PAD, y, room, MICRO, turn(block)
+            )
+            parts.append(note)
+        block += 1
+    return (
+        flat_open(SVG_WIDTH, math.ceil(y + PAD), groups) + "".join(parts) + "</svg>\n"
+    )
+
+
+def render_flat_phone(
+    groups: list[tuple[str, list[dict]]], accent: str, images: dict | None = None
+) -> str:
+    """Return the 320 px phone card in the flat style, the profile's certs_mobile layout.
+
+    Its counts are the 840 px card's; certifications sit three a row on tiles, every
+    later group shows one row of five while certifications are drawn above it.
+    """
+    images = {} if images is None else images
+    column = PHONE - 2 * PHONE_PAD
+    # (badges a row, gap, drawn size, image size, on tiles) of the first group, then the rest
+    shapes = [(3, 10, 64, FLAT_CERT, True), (5, 2, 46, FLAT_BADGE, False)]
+    picks = flat_pick(
+        groups,
+        PHONE_ROWS,
+        lambda badge, i: card_image(images, badge, shapes[min(i, 1)][3]),
+        one_row=True,
+    )
+    total = sum(len(badges) for _, badges in groups)
+    blocks = [flat_text(PHONE_PAD, 30, f"{total} CREDLY BADGES", MICRO_PHONE, accent)]
+    y, block, walked, drawn = 30, 0, False, False
+    for i, ((label, badges), shown) in enumerate(zip(groups, picks)):
+        if not badges:
+            continue
+        count, gap, size, fetched, tiled = shapes[min(i, 1)]
+        heading, y = headings(
+            f"{len(badges)} {label.upper()}",
+            PHONE_PAD,
+            y + (30 if drawn else 26),
+            column,
+            MICRO_PHONE,
+        )
+        blocks.append(heading)
+        drawn = True
+        y += 12 if tiled else 10
+        cell = (column - gap * (count - 1)) / count
+        tiles, places, rows = [], [], []
+        for start in range(0, len(shown), count):
+            chunk = shown[start : start + count]
+            # a short last row of tiles is centred, a short row of bare badges starts left
+            shift = (count - len(chunk)) * (cell + gap) / 2 if tiled else 0
+            body = []
+            for j, badge in enumerate(chunk):
+                x = PHONE_PAD + shift + j * (cell + gap)
+                places.append((x, y))
+                if tiled:
+                    tiles.append(flat_rect(x, y, cell, cell, HAIR_FILL))
+                inset = (cell - size) / 2
+                body.append(
+                    f"<g><title>{html.escape(badge_name(badge))}</title>"
+                    f'<image href="{card_image(images, badge, fetched)}" x="{x + inset:.1f}" '
+                    f'y="{y + inset:.1f}" width="{size}" height="{size}"/></g>'
+                )
+            rows.append("".join(body))
+            y += cell + gap
+        if shown:
+            y -= gap
+            if not walked:
+                tiles.append(lit_border(places, cell, cell, accent))
+                walked = True
+            if tiles:
+                blocks.append(entrance(turn(block), "".join(tiles)))
+            blocks += [entrance(turn(block + r), row) for r, row in enumerate(rows)]
+            block += len(rows)
+        if len(shown) < len(badges):
+            note, y = more_line(
+                len(shown),
+                len(badges),
+                PHONE_PAD,
+                y,
+                column,
+                MICRO_PHONE,
+                turn(block),
+            )
+            blocks.append(note)
+        block += 1
+    return (
+        flat_open(PHONE, math.ceil(y + PHONE_PAD), groups)
+        + "".join(blocks)
+        + "</svg>\n"
+    )
+
+
 def write_svg(content: str, svg_path: str) -> bool:
     """Write an SVG card to svg_path; return True when the file changed."""
     path = Path(svg_path)
@@ -713,6 +1224,12 @@ def build_cards(
     per_row, accent = svg
     groups = svg_groups(certs, prof, know, SVG_GROUPS)
     images = {}
+    if STYLE == "flat":
+        cards = [(SVG_PATH, render_flat(groups, per_row, accent, images))]
+        if SVG_MOBILE_PATH:
+            phone = render_flat_phone(groups, accent, images)
+            cards.append((SVG_MOBILE_PATH, phone))
+        return cards
     cards = [(SVG_PATH, render_svg(groups, per_row, accent, DESKTOP, images))]
     if SVG_MOBILE_PATH:
         mobile = render_svg(groups, MOBILE_PER_ROW, accent, MOBILE, images)
@@ -733,6 +1250,8 @@ def main():
         fail(f"include-other must be true or false, got '{INCLUDE_OTHER}'.")
     commit_settings()
     svg = svg_settings() if OUTPUT != "readme" else None
+    if svg and STYLE not in STYLES:
+        fail(f"style must be classic or flat, got '{STYLE}'.")
 
     print(f"Fetching badges for Credly user: {CREDLY_USERNAME}")
     data = fetch_badges(CREDLY_USERNAME)

@@ -1,6 +1,7 @@
 """Tests for update-credly-badges.py (no network: every fetch is stubbed)."""
 
 import base64
+import hashlib
 import importlib.util
 import io
 import json
@@ -906,6 +907,200 @@ def test_main_rejects_bad_inputs_before_fetching(tmp_path, monkeypatch, setting,
 
     with pytest.raises(SystemExit):
         mod.main()
+
+
+# ---------------------------------------------------------------- style: flat
+
+# sha256 of the classic cards main() writes for FROZEN_BADGES with Pillow hidden,
+# captured from origin/main at d2b3cb1 (v1.5.0): the default style must not move a byte
+CLASSIC_SHA256 = {
+    "credly-badges.svg": "0765e76bb3316552adcfd6866800c68d591dcb7bbc65edb37aaa5fcd5f7fd399",
+    "credly-badges-mobile.svg": "e890bcc8802ff65dd9f3800bf86bf3d4416051b72d1d1b8571e9fecb172fe227",
+}
+LOOP_SECONDS = {"2s", "3s", "4s", "6s", "12s", "24s"}
+ANIMATIONS = (f"{SVG}animate", f"{SVG}animateTransform")
+
+
+@pytest.fixture
+def plain(monkeypatch, fetched):
+    """Images served from memory with Pillow hidden, so every data URI has one length."""
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    return fetched
+
+
+def image_length():
+    return len(mod.badge_data_uri("https://images.credly.com/images/x/y.png", 64))
+
+
+def flat_cards(groups, per_row=(6, 8)):
+    """Render both flat cards from one image cache; return (desktop root, phone root, markup)."""
+    images = {}
+    desktop = mod.render_flat(groups, list(per_row), "#60a5fa", images)
+    phone = mod.render_flat_phone(groups, "#60a5fa", images)
+    return ET.fromstring(desktop), ET.fromstring(phone), desktop + phone
+
+
+def mixed():
+    return mod.svg_groups(badges("c", 7), badges("p", 5), badges("k", 9), "two")
+
+
+def texts(root):
+    """Return the mono micro-labels: the count line, group headings and +N more lines."""
+    return [t.text for t in root.iter(f"{SVG}text") if t.get("class") == "m"]
+
+
+def test_flat_cards_are_840_and_320_wide(plain):
+    desktop, phone, _ = flat_cards(mixed())
+
+    assert (desktop.get("width"), desktop.get("viewBox").split()[2]) == ("840", "840")
+    assert (phone.get("width"), phone.get("viewBox").split()[2]) == ("320", "320")
+
+
+def test_flat_cards_rest_on_their_finished_frame(plain):
+    # a still render (no SMIL) draws the element's own attributes: nothing may start hidden
+    for root in flat_cards(mixed())[:2]:
+        for element in root.iter():
+            assert element.get("opacity") != "0"
+            assert element.get("begin") is None
+        entrances = [a for a in root.iter() if a.tag in ANIMATIONS and a.get("fill")]
+        assert entrances
+        for animation in entrances:
+            first, held, _ = animation.get("values").split(";")
+            # the start value holds from 0 s until the block's turn, then it eases in
+            assert first == held
+            assert animation.get("keyTimes").startswith("0;")
+            assert animation.get("fill") == "freeze"
+
+
+def test_flat_loops_run_on_the_page_clock(plain):
+    groups = mod.svg_groups(badges("c", 20), badges("p", 3), [], "two")
+
+    for root in flat_cards(groups, per_row=(12, 8))[:2]:
+        loops = [a for a in root.iter() if a.get("repeatCount") == "indefinite"]
+        assert loops
+        for animation in loops:
+            assert animation.get("dur") in LOOP_SECONDS
+            times = [float(t) for t in animation.get("keyTimes").split(";")]
+            assert times[0] == 0
+            assert times[-1] == 1
+            assert times == sorted(times)
+
+
+def test_flat_text_never_drops_below_the_floor(plain):
+    long_name = make_badge("Practitionerpractitionerpractitioner Associate " * 3)
+    groups = mod.svg_groups([long_name, *badges("c", 2)], badges("p", 4), [], "two")
+
+    desktop, phone, _ = flat_cards(groups, per_row=(12, 12))
+
+    assert min(float(t.get("font-size")) for t in desktop.iter(f"{SVG}text")) >= 10.5
+    assert min(float(t.get("font-size")) for t in phone.iter(f"{SVG}text")) >= 11.5
+
+
+def test_flat_cards_have_no_gradient_glow_or_sheen(plain):
+    _, _, markup = flat_cards(mixed())
+
+    for banned in ("Gradient", "<filter", "skewX", "shine", "@keyframes", "animation:"):
+        assert banned not in markup
+
+
+def test_flat_cards_count_every_badge_and_agree(plain):
+    desktop, phone, _ = flat_cards(mixed())
+
+    for root in (desktop, phone):
+        assert texts(root)[:3] == [
+            "21 CREDLY BADGES",
+            "7 INDUSTRY CERTIFICATIONS",
+            "14 LEARNING AND PARTNER BADGES",
+        ]
+        assert root.get("aria-label").startswith("21 Credly badges: c 0, c 1")
+
+
+def test_flat_budget_keeps_certifications_first_in_whole_rows(plain, monkeypatch):
+    # room for eight images: eight certifications fit, cut back to two whole rows of three
+    monkeypatch.setattr(mod, "IMAGE_BUDGET", image_length() * 8)
+    groups = mod.svg_groups(badges("c", 10), badges("p", 9), [], "two")
+
+    desktop = ET.fromstring(mod.render_flat(groups, [3, 4], "#60a5fa"))
+
+    assert [len(row) for row in rows(desktop)] == [3, 3, 2]
+    # the two learning badges left fit no whole row of four, so the two that fit stay
+    assert "+4 MORE ON CREDLY" in texts(desktop)
+    assert "+7 MORE ON CREDLY" in texts(desktop)
+
+
+def test_flat_budget_cuts_later_groups_to_whole_rows(plain, monkeypatch):
+    monkeypatch.setattr(mod, "IMAGE_BUDGET", image_length() * 15)
+    groups = mod.svg_groups(badges("c", 10), badges("p", 9), [], "two")
+
+    desktop, phone, _ = flat_cards(groups, per_row=(3, 4))
+
+    # every certification fits; five learning badges fit, cut back to one row of four
+    assert [len(row) for row in rows(desktop)] == [3, 3, 3, 1, 4]
+    assert [t for t in texts(desktop) if "MORE" in t] == ["+5 MORE ON CREDLY"]
+    # the phone card shows one row of five under its certifications
+    assert [len(row) for row in rows(phone)] == [3, 3, 3, 1, 5]
+    assert [t for t in texts(phone) if "MORE" in t] == ["+4 MORE ON CREDLY"]
+
+
+def test_flat_lit_border_walks_the_first_groups_tiles(plain):
+    desktop, phone, _ = flat_cards(mixed())
+
+    for root in (desktop, phone):
+        (lit,) = [r for r in root.iter(f"{SVG}rect") if r.get("stroke-width") == "1.5"]
+        (walk,) = lit.iter(f"{SVG}animateTransform")
+        assert walk.get("values").startswith("0 0;")
+        assert walk.get("dur") == "12s"
+
+
+def test_main_writes_flat_cards_that_share_every_image(tmp_path, monkeypatch, plain):
+    _, svg, outputs = stub_profile(tmp_path, monkeypatch, "svg")
+    mobile = tmp_path / "assets" / "credly-badges-mobile.svg"
+    monkeypatch.setattr(mod, "SVG_MOBILE_PATH", str(mobile))
+    monkeypatch.setattr(mod, "STYLE", "flat")
+
+    mod.main()
+
+    assert ET.parse(svg).getroot().get("width") == "840"
+    assert ET.parse(mobile).getroot().get("width") == "320"
+    # two certification images and one other, fetched once for both cards
+    assert len(plain) == 3
+    assert outputs.read_text(encoding="utf-8").endswith("changed=true\n")
+
+
+@pytest.mark.parametrize("style", [None, "classic"])
+def test_main_classic_style_is_byte_identical_to_v1_5_0(
+    tmp_path, monkeypatch, plain, style
+):
+    _, svg, _ = stub_profile(tmp_path, monkeypatch, "svg")
+    mobile = svg.with_name("credly-badges-mobile.svg")
+    monkeypatch.setattr(mod, "SVG_MOBILE_PATH", str(mobile))
+    if style:
+        monkeypatch.setattr(mod, "STYLE", style)
+
+    mod.main()
+
+    for path in (svg, mobile):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert digest == CLASSIC_SHA256[path.name]
+
+
+def test_main_rejects_an_unknown_style_before_fetching(tmp_path, monkeypatch):
+    stub_profile(tmp_path, monkeypatch, "svg")
+    monkeypatch.setattr(mod, "STYLE", "glass")
+    monkeypatch.setattr(mod, "fetch_badges", lambda username: pytest.fail("fetched"))
+
+    with pytest.raises(SystemExit):
+        mod.main()
+
+
+def test_main_readme_mode_ignores_style(tmp_path, monkeypatch, fetched):
+    readme, _, _ = stub_profile(tmp_path, monkeypatch, "readme")
+    monkeypatch.setattr(mod, "STYLE", "flat")
+
+    mod.main()
+
+    assert FROZEN_SECTION in readme.read_text(encoding="utf-8")
+    assert fetched == []
 
 
 # ---------------------------------------------------------------- commit: true
