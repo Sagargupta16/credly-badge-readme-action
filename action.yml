@@ -47,13 +47,17 @@ inputs:
     required: false
     default: "6,8"
   svg-mobile-path:
-    description: "Also write a 340px-wide phone card here when output is svg or both, for a <picture> source; empty draws none"
+    description: "Also write a phone card here when output is svg or both (340px wide, 320px with style flat), for a <picture> source; empty draws none"
     required: false
     default: ""
   accent:
-    description: "Hex color of the SVG card's group labels"
+    description: "Hex color of the SVG card's group labels (with style flat: the count line and the lit border)"
     required: false
     default: "#60a5fa"
+  style:
+    description: "Look of both SVG cards: classic (the card every earlier version drew) or flat (the flat style in the README)"
+    required: false
+    default: "classic"
   include-other:
     description: "Also show the badges on your profile's Other tab, which you added from outside Credly and Credly marks unverified (true/false)"
     required: false
@@ -129,6 +133,7 @@ runs:
         SVG_PER_ROW: ${{ inputs.svg-per-row }}
         SVG_MOBILE_PATH: ${{ inputs.svg-mobile-path }}
         ACCENT: ${{ inputs.accent }}
+        STYLE: ${{ inputs.style }}
         INCLUDE_OTHER: ${{ inputs.include-other }}
         HIDE_EXPIRED: ${{ inputs.hide-expired }}
         SORT: ${{ inputs.sort }}

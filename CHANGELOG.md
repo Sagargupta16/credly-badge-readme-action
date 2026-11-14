@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-11-14
+
+### Added
+
+- `style`: `flat` draws both SVG cards in a flat look: one surface with a hairline border, each badge on a tile (the name under it on the 840 px card), mono labels with the counts, and one loop, a lit border that walks the certification tiles on a 12 s clock (24 s past eight tiles). There is no float, no shine sweep, no gradient and no glow. Each entrance holds its start value until its turn and the card's own attributes are the finished frame, so a still render shows every badge in place. Names wrap and never shrink: nothing on the 840 px card is under 10.5 px.
+- With `style: flat` the inlined images stay inside a 64,000-character budget, so the card stays well under 100 KB for any profile. Certifications take the budget first, in whole rows, then the later groups; a group's badges that do not fit are counted in a `+N MORE ON CREDLY` line, and the headings still count every badge. On the example profile's 22 badges the card is 71,060 bytes and shows 6 certifications and 8 of the 16 other badges; its classic card is 125,282.
+- With `style: flat` the `svg-mobile-path` card is 320 px wide in the same look: certifications three a row on tiles, then one row of five for each later group while certifications are drawn above it, the same group counts as the 840 px card, and no text under 11.5 px. It draws the 840 px card's images, so it downloads nothing extra with the default `svg-per-row` (56,513 bytes on the example).
+- `examples/credly-badges-flat.svg` and `examples/credly-badges-flat-mobile.svg`, the flat cards of the example profile.
+- CI's `action` job runs the action a third time with `style: flat` and fails unless both cards parse at 840 px and 320 px, inline only WebP images and stay under 100 KB.
+- `style` defaults to `classic`, which draws the same bytes as 1.5.0: both example cards and the classic cards of seven input combinations render byte-identical to 1.5.0, a test pins the classic cards of the test fixture by hash, and README mode never reads `style`. `accent` colors the count line and the lit border of a flat card; every other input works the same in both styles.
+
 ## [1.5.0] - 2026-11-13
 
 ### Added

@@ -127,3 +127,31 @@ jobs:
               assert all(h.startswith("data:image/webp;base64,") for h in hrefs), f"a badge image in {path} is not WebP"
               print(f"{path} parses as XML with {len(hrefs)} WebP badge images, {os.path.getsize(path)} bytes")
           EOF
+
+      # Third run, with style: flat, the only place the style input's wiring through
+      # action.yml is exercised.
+      - name: Run the action with style flat
+        uses: ./
+        with:
+          credly-username: sagar-gupta.f8eb96cc
+          output: svg
+          style: flat
+          svg-path: scratch-flat.svg
+          svg-mobile-path: scratch-flat-mobile.svg
+
+      - name: Assert both flat cards parse, inline WebP badges and stay under 100 KB
+        run: |
+          python - <<'EOF'
+          import os
+          import xml.etree.ElementTree as ET
+
+          for path, width in (("scratch-flat.svg", "840"), ("scratch-flat-mobile.svg", "320")):
+              root = ET.parse(path).getroot()
+              assert root.get("width") == width, f"{path} is {root.get('width')}px wide, not {width}"
+              hrefs = [image.get("href") for image in root.iter("{http://www.w3.org/2000/svg}image")]
+              assert hrefs, f"{path} has no badge images"
+              assert all(h.startswith("data:image/webp;base64,") for h in hrefs), f"a badge image in {path} is not WebP"
+              size = os.path.getsize(path)
+              assert size < 100_000, f"{path} is {size} bytes, over the 100 KB budget"
+              print(f"{path} parses as XML with {len(hrefs)} WebP badge images, {size} bytes")
+          EOF

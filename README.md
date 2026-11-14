@@ -24,7 +24,8 @@ this page on a phone and you get the narrower `svg-mobile-path` card instead.
 - Categorizes badges into **Industry Certifications**, **Professional/Partner**, and **Knowledge/Learning**
 - Updates your README between markers (non-destructive -- only touches the badge section)
 - Optional [SVG card mode](#svg-card-mode): every badge in one self-hosted, animated SVG,
-  plus an optional [phone card](#phone-card) that stays readable on a 375px screen
+  plus an optional [phone card](#phone-card) that stays readable on a 375px screen, in the
+  classic look or the [flat style](#flat-style)
 - [Choose the badges](#choose-which-badges-show): hide expired ones, sort newest or oldest
   first, cap the count
 - Optional [Other badges](#include-badges-from-the-other-tab): the ones you added to
@@ -107,8 +108,9 @@ That's it. Your badges will auto-update every Monday.
 | `svg-path` | No | `assets/credly-badges.svg` | Where the SVG card is written; missing folders are created |
 | `svg-groups` | No | `two` | SVG grouping: `two` (certifications, then every other badge) or `three` (the README's categories) |
 | `svg-per-row` | No | `6,8` | Badges per row for each SVG group, 1 to 12; the last value repeats for later groups |
-| `svg-mobile-path` | No | empty | Also write the 340px [phone card](#phone-card) here (`svg` or `both`); empty draws none |
-| `accent` | No | `#60a5fa` | Hex color of the SVG group labels; quote it, an unquoted `#` starts a YAML comment |
+| `svg-mobile-path` | No | empty | Also write the 340px [phone card](#phone-card) here (`svg` or `both`; 320px with `style: flat`); empty draws none |
+| `accent` | No | `#60a5fa` | Hex color of the SVG group labels (`style: flat`: the count line and the lit border); quote it, an unquoted `#` starts a YAML comment |
+| `style` | No | `classic` | Look of both SVG cards: `classic`, or `flat` for the [flat style](#flat-style) |
 | `include-other` | No | `false` | `true` also shows the badges on your profile's [Other tab](#include-badges-from-the-other-tab) |
 | `hide-expired` | No | `false` | `true` leaves out badges whose Credly expiry date has passed |
 | `sort` | No | `credly` | `credly` keeps your profile order; `newest` or `oldest` sorts by issue date |
@@ -117,7 +119,7 @@ That's it. Your badges will auto-update every Monday.
 | `commit-message` | No | `chore: update Credly badges` | Message for the commit `commit: true` makes |
 
 `svg-mobile-path`, `hide-expired`, `sort`, `max-badges`, `commit` and `commit-message`
-are new in `v1.3.0`, and `include-other` in `v1.5.0`.
+are new in `v1.3.0`, `include-other` in `v1.5.0`, and `style` in `v1.6.0`.
 
 ## Outputs
 
@@ -270,6 +272,45 @@ Then let the browser pick the card by screen width. GitHub keeps `<picture>` and
   <source media="(max-width: 600px)" srcset="assets/credly-badges-mobile.svg">
   <img src="assets/credly-badges.svg" width="100%" alt="My Credly badges">
 </picture></a>
+```
+
+### Flat style
+
+`style: flat` draws both cards in a flat look: one surface with a hairline border, each
+badge on a tile, mono labels that carry the counts, and one loop, a lit border that walks
+the certification tiles on a 12 s clock. Every badge rests in its finished place, with no
+float and no shine sweep, and each entrance holds its start value until its turn, so a
+still render (a link preview, a viewer without SMIL) shows the whole card. Available from
+`v1.6.0`. The default, `classic`, draws the same bytes as `v1.5.0`, so a workflow that
+does not set `style` sees no change.
+
+<picture><source media="(max-width: 600px)" srcset="examples/credly-badges-flat-mobile.svg"><img src="examples/credly-badges-flat.svg" width="100%" alt="The same 22 Credly badges drawn by style flat: six certifications on tiles, eight learning and partner badges, and a line counting the eight more on Credly"></picture>
+
+- **Size**: the inlined images stay inside a budget of 64,000 characters, so a card stays
+  well under 100 KB however many badges a profile has. Certifications take the budget
+  first, in whole rows, then the other groups in order; a group's badges that do not fit
+  are counted in a `+N MORE ON CREDLY` line, and its heading still counts every badge.
+  The example shows 6 certifications and 8 of the 16 other badges in 71,060 bytes, where
+  the classic card of the same profile is 125,282.
+- **Phone card**: with `svg-mobile-path` set, the phone card is 320px wide, in the same
+  look: certifications three a row on tiles, then one row of five for each later group
+  while there are certifications above it, and the same group counts as the 840px card. No text
+  on it is under 11.5px. It draws the 840px card's images, so with the default
+  `svg-per-row` it downloads nothing extra (56,513 bytes for the example).
+- **Text**: nothing on the 840px card is under 10.5px. A badge name wraps over up to four
+  lines under a certification and three under the other badges, and ends in three dots past
+  that; it never shrinks. The full titles stay in each badge's `<title>` and the card's
+  `aria-label`.
+- **Inputs**: `svg-groups`, `svg-per-row` (on the 840px card), `hide-expired`, `sort`,
+  `max-badges` and `include-other` work as they do for the classic card. `accent` colors the
+  count line and the lit border.
+
+```yaml
+        with:
+          credly-username: "your-credly-username"
+          output: svg
+          style: flat
+          svg-mobile-path: assets/credly-badges-mobile.svg
 ```
 
 ## Advanced Usage
@@ -444,7 +485,7 @@ describe them on 2026-10-18:
 | Grouping | certifications, partner, learning | none | none |
 | Sort and filter | `sort`, `max-badges`, `hide-expired` | newest first, `NUMBER_LAST_BADGES` | `sort`, `max_items`, issuer and skill filters |
 | On a phone | README section wraps; the card has a 340px phone version | README section wraps | one width per URL (`card_width`) |
-| Themes | dark, with `accent` | plain images | 20 themes, light and dark |
+| Themes | dark, `classic` or `flat`, with `accent` | plain images | 20 themes, light and dark |
 | Commits for you | with `commit: true` | yes | nothing to commit |
 
 Pick credly-readme-stats for themes and stats cards if a hosted image URL suits you.
@@ -610,6 +651,14 @@ CREDLY_USERNAME=sagar-gupta.f8eb96cc OUTPUT=svg SVG_PATH=examples/credly-badges.
   SVG_MOBILE_PATH=examples/credly-badges-mobile.svg \
   uv run --no-project --with pillow==13.0.0 python update-credly-badges.py
 uv run --no-project --with playwright --with pillow==13.0.0 python scripts/phone-preview.py
+```
+
+The two flat examples come from the same profile with `STYLE=flat`:
+
+```bash
+CREDLY_USERNAME=sagar-gupta.f8eb96cc OUTPUT=svg STYLE=flat SVG_PATH=examples/credly-badges-flat.svg \
+  SVG_MOBILE_PATH=examples/credly-badges-flat-mobile.svg \
+  uv run --no-project --with pillow==13.0.0 python update-credly-badges.py
 ```
 
 ## License
